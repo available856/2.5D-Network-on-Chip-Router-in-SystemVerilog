@@ -4,7 +4,7 @@ This repository contains the implementation and supporting materials for my Dipl
 
 Contents
 
-RTL Source Code: SystemVerilog modules for the NoC router architecture.
+RTL Source Code: SystemVerilog modules for the NoC router architecture. Based on the source code of Andrea Galimberti, Filippo Testa and Alberto Zeni : https://github.com/agalimberti/NoCRouter
 
 Scripts & Simulation Files: Testbenches, verification utilities, and supporting scripts.
 
