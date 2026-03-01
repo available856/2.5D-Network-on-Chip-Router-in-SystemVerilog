@@ -7,7 +7,7 @@ module round_robin_arbiter #(
     output logic [AGENTS_NUM-1:0] grants_o
 );
 
-    localparam [31:0] AGENTS_PTR_SIZE = $clog2(AGENTS_NUM);
+    localparam int AGENTS_PTR_SIZE = $clog2(AGENTS_NUM);
 
     logic [AGENTS_PTR_SIZE-1:0] highest_priority, highest_priority_next;
 
@@ -40,14 +40,25 @@ module round_robin_arbiter #(
 
     always_comb
     begin
+        int idx, next_idx;
         grants_o = {AGENTS_NUM{1'b0}};
         highest_priority_next = highest_priority;
         for(int i = 0; i < AGENTS_NUM; i = i + 1)
         begin
-            if(requests_i[(highest_priority + i) % AGENTS_NUM])
+            idx = highest_priority + i;
+
+            if (idx >= AGENTS_NUM)
+                idx = idx - AGENTS_NUM;
+
+            next_idx = idx + 1;
+
+            if (next_idx >= AGENTS_NUM)
+                next_idx = 0;
+                
+            if(requests_i[idx])
             begin
-                grants_o[(highest_priority + i) % AGENTS_NUM] = 1'b1;
-                highest_priority_next = (highest_priority + i + 1) % AGENTS_NUM;
+                grants_o[idx] = 1'b1;
+                highest_priority_next = next_idx[AGENTS_PTR_SIZE-1:0];
                 break;
             end
         end
