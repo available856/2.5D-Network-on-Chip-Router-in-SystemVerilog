@@ -144,10 +144,10 @@ module tb_vc_buffer;
         // --------------------------------------------------------
         $display("Scenario 1: Standard packet-[%0t]", $time);
 
-        send_flit(HEAD, {2'b00, 60'hAAAAAAAAAAAAAAA});
+        send_flit(HEAD, {62{$random}});
         grant_vc(2);
-        send_flit(BODY, {2'b00, 60'hBBBBBBBBBBBBBBB});
-        send_flit(TAIL, {2'b00, 60'hCCCCCCCCCCCCCCC});
+        send_flit(BODY, {62{$random}});
+        send_flit(TAIL, {62{$random}});
 
         consume_flits(3);
 
@@ -161,7 +161,7 @@ module tb_vc_buffer;
         // --------------------------------------------------------
         $display("Scenario 2: HEADTAIL-[%0t]", $time);
 
-        send_flit(HEADTAIL, {2'b00, 60'hDEADBEEFDEADBEF});
+        send_flit(HEADTAIL, {62{$random}});
         grant_vc(1);
         consume_flits(1);
 
@@ -175,12 +175,12 @@ module tb_vc_buffer;
         // --------------------------------------------------------
         $display("Scenario 3: Illegal interleaving-[%0t]", $time);
 
-        send_flit(HEAD, {2'b00, 60'h111111111111111});
+        send_flit(HEAD, {62{$random}});
         grant_vc(3);
 
         wait(switch_request_o);
 
-        send_flit(HEAD, {2'b00, 60'h222222222222222}); // Illegal HEAD while first packet is active
+        send_flit(HEAD, {62{$random}}); // Illegal HEAD while first packet is active
 
        wait(error_o);
             $display("[PASS] Illegal HEAD correctly flagged-[%0t]", $time);
