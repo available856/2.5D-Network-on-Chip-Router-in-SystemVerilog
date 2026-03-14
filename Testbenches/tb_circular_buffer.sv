@@ -4,6 +4,8 @@ import noc_params::*;
 
 module tb_circular_buffer ();
 
+  parameter CLK_PERIOD = 10;
+
     // --------------------------------------------------
     // Clock / Reset
     // --------------------------------------------------
@@ -11,8 +13,7 @@ module tb_circular_buffer ();
     logic clk;
 
     initial clk = 0;
-    always  #5 clk = ~clk; // 100MHz clock */
-
+    always #(CLK_PERIOD/2) clk = ~clk;
     // --------------------------------------------------
     // DUT signals
     // --------------------------------------------------

@@ -2,10 +2,11 @@
 
 module tb_round_robin;
 
-    localparam int AGENTS_NUM = 4;
+    parameter CLK_PERIOD = 10;
+    localparam AGENTS_NUM = 4;
 
     logic clk;
-    logic rst;
+    logic rst; 
     logic [AGENTS_NUM-1:0] requests;
     logic [AGENTS_NUM-1:0] grants;
 
@@ -20,7 +21,7 @@ module tb_round_robin;
     );
 
     // Clock generation
-    always #5 clk = ~clk;
+    always #(CLK_PERIOD/2) clk = ~clk;
 
     // Simple task to advance one cycle
     task tick;
