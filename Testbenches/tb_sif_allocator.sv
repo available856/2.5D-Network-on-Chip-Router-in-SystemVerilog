@@ -237,6 +237,62 @@ repeat (20) begin
     tick;
 end
 
+// ----------------------------
+// Test 6: IDLE case (no requests)
+// ----------------------------
+reset_dut;
+
+$display("[%0t]-Test 6: Idle case (no active requests)", $time);
+
+repeat (4) begin
+    #1;
+
+    foreach (grant_o[i]) begin
+        if (grant_o[i] != '0)
+            $error("Unexpected grant during IDLE at input port %0d: %b", i, grant_o[i]);
+    end
+
+    $display("[%0t]-All grants correctly idle", $time);
+
+    tick;
+end
+
+// ----------------------------
+// Test 7: Disappearing request
+// ----------------------------
+reset_dut;
+
+$display("[%0t]-Test 7: Disappearing request", $time);
+
+// initial request
+request_i[1][0] = 1;
+out_port_i[1][0] = EAST;
+
+#1;
+
+if (!grant_o[1][0])
+    $error("Request should have been granted but was not");
+else
+    $display("[%0t]-Grant correctly issued before request disappears", $time);
+
+tick;
+
+// remove the request
+request_i[1][0] = 0;
+
+#1;
+
+foreach (grant_o[i]) begin
+    foreach (grant_o[i][j]) begin
+        if (grant_o[i][j])
+            $error("Grant persisted after request disappeared at input %0d VC %0d", i, j);
+    end
+end
+
+$display("[%0t]-Grant correctly removed after request disappeared", $time);
+
+tick;
+
 
 $display("-------------Simulation Finished------------");
 $finish;
