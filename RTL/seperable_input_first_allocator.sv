@@ -6,7 +6,7 @@ module separable_input_first_allocator #(
     input rst,
     input clk,
     input [PORT_NUM-1:0][VC_NUM-1:0] request_i,
-    input port_t [VC_NUM-1:0] out_port_i [PORT_NUM-1:0],
+    input port_t out_port_i [PORT_NUM-1:0][VC_NUM-1:0],
     output logic [PORT_NUM-1:0][VC_NUM-1:0] grant_o
 );
 
@@ -67,12 +67,9 @@ module separable_input_first_allocator #(
       arbitration from Input Ports winning second stage arbitration
       will correspond a 1 in the output grant matrix.
     */
-    always_comb
-    begin
+    always_comb begin
         //out_request = {PORT_NUM*PORT_NUM{1'b0}};
         out_request = '0;
-        //grant_o= {PORT_NUM*VC_NUM{1'b0}};
-        grant_o = '0;
 
         for(int in_port = 0; in_port < PORT_NUM; in_port = in_port + 1)
         begin
@@ -85,6 +82,11 @@ module separable_input_first_allocator #(
                 end
             end
         end
+    end
+
+    always_comb begin
+        //grant_o = {PORT_NUM*VC_NUM{1'b0}};
+        grant_o = '0;
 
         for(int out_port = 0; out_port < PORT_NUM; out_port = out_port + 1)
         begin
@@ -100,7 +102,6 @@ module separable_input_first_allocator #(
                 end
             end
         end
-
     end
 
 endmodule
