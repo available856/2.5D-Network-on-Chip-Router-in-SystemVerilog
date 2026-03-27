@@ -59,7 +59,7 @@ initial begin
     rst = 0;
 
     // ----------------------------
-    // Test 1: Different VCs same input, different output ports
+    // Test 1: Different VCs same input, same output ports
     // ----------------------------
     $display("[%0t]-Test 1: Different VCs same input, same output ports",$time);
     request_i[0] = 2'b11; // Both VCs at input port 0 request
@@ -98,11 +98,11 @@ initial begin
     end
 
     // ----------------------------
-    // Test 3: Full stress contention test between different input ports for the same output port
+    // Test 3: Full stress contention test between different input ports for the same output port - Varying OP
     // ----------------------------
     reset_dut;
 
-    $display("[%0t]-Test 3: Full stress contention test between different input ports for the same output port", $time);
+    $display("[%0t]-Test 3: Full stress contention test between different input ports for the same output port - Varying OP", $time);
     
     foreach (request_i[i]) begin
         request_i[i] = '1; // All VCs at all input ports request
@@ -124,9 +124,8 @@ initial begin
     foreach (grant_o[i]) begin
         if (grant_o[i] == 2'b11)
             $error("Two VCs granted at same input port %0d", i);
-        else 
-            $display("[%0t]-Property 1 passed for input port %0d: Grant = %b", $time, i, grant_o[i]);
     end
+    $display("[%0t]-Property 1 : PASSED", $time);
 
     // property 2: only one input per output
     $display("[%0t]-Property 2: Only one input per output", $time);
@@ -154,7 +153,7 @@ initial begin
 
     tick;
 end
-    
+        
 
     // ----------------------------
     // Test 4: No contention, multiple requests from different input ports wanting different output ports
@@ -206,9 +205,8 @@ repeat (20) begin
     foreach (grant_o[i]) begin
         if (grant_o[i] == 2'b11)
             $error("Two VCs granted at same input port %0d", i);
-        else 
-            $display("[%0t]-Property 1 passed for input port %0d: Grant = %b", $time, i, grant_o[i]);
     end
+    $display("[%0t]-Property 1 : PASSED", $time);
 
     // property 2: only one input per output
     $display("[%0t]-Property 2: Only one input per output", $time);
@@ -226,6 +224,8 @@ repeat (20) begin
         if (output_count[p] > 1)
             $error("Multiple inputs granted same output port %0d", p);
     end
+
+    $display("[%0t]-Property 2 : PASSED", $time);
 
     foreach (grant_o[i]) begin
         foreach (grant_o[i][j]) begin
@@ -292,6 +292,64 @@ end
 $display("[%0t]-Grant correctly removed after request disappeared", $time);
 
 tick;
+
+// ----------------------------
+// Test 8: Full stress contention test between different input ports for the same output port - Constant OP
+// ----------------------------
+reset_dut;
+
+$display("[%0t]-Test 8: Full stress contention test between different input ports for the same output port - Constant OP", $time);
+
+foreach (request_i[i]) begin
+    request_i[i] = '1; // All VCs at all input ports request
+end
+
+repeat (20) begin
+    int output_count[PORT_NUM];
+
+    foreach (out_port_i[i]) begin
+        foreach (out_port_i[i][j]) begin
+            out_port_i[i][j] = NORTH; // All VCs want the same output port at the same time
+        end
+    end
+
+#1; // Wait for combinational logic to settle
+
+// property 1: no two VCs granted in same input
+$display("[%0t]-Property 1: No two VCs granted in same input", $time);
+foreach (grant_o[i]) begin
+    if (grant_o[i] == 2'b11)
+        $error("Two VCs granted at same input port %0d", i);
+end
+$display("[%0t]-Property 1 : PASSED", $time);
+
+// property 2: only one input per output
+$display("[%0t]-Property 2: Only one input per output", $time);
+
+foreach (output_count[p]) output_count[p] = 0;
+
+foreach (grant_o[i]) begin
+    foreach (grant_o[i][j]) begin
+        if (grant_o[i][j])
+            output_count[out_port_i[i][j]]++;
+    end
+end
+
+foreach (output_count[p]) begin
+    if (output_count[p] > 1)
+        $error("Multiple inputs granted same output port %0d", p);
+    end
+
+foreach (grant_o[i]) begin
+    foreach (grant_o[i][j]) begin
+        if (grant_o[i][j])
+            $display("[%0t]-IP%0d -> VC%0d -> OP%0d", $time, i, j, out_port_i[i][j]);
+    end
+end
+
+tick;
+end
+
 
 
 $display("-------------Simulation Finished------------");
