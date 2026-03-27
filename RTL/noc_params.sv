@@ -26,6 +26,7 @@ package noc_params;
     // ------------------------------------------------------------------------
     typedef enum logic [1:0] {HEAD, BODY, TAIL, HEADTAIL} flit_label_t;
     typedef enum logic [2:0] {LOCAL, NORTH, SOUTH, WEST, EAST} port_t;
+    typedef enum logic [0:0] {ESCAPE, ADAPTIVE} vc_class_t;
 
     // ------------------------------------------------------------------------
     // 3. Payload Calculations
