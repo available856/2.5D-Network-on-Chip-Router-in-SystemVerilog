@@ -8,43 +8,40 @@ module vc_allocator #(
     input_block2vc_allocator.vc_allocator ib_if
 );
 
-    logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] port_grant;
-    port_t [PORT_NUM-1:0][VC_NUM-1:0] selected_out_port;
-    logic [PORT_NUM-1:0][VC_SIZE-1:0] selected_out_vc;
-    logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] port_request;
+    localparam NUM_RESOURCES = PORT_NUM * VC_NUM; //Down VCs on downstream ports
+    localparam NUM_AGENTS = PORT_NUM * VC_NUM; //Up VCs on upstream ports
+
+    
+    logic [NUM_AGENTS-1:0][NUM_RESOURCES-1:0] requests_1;
+    logic [NUM_AGENTS-1:0][NUM_RESOURCES-1:0] grants_1;
+    logic [NUM_RESOURCES-1:0][NUM_AGENTS-1:0] grants_2;
+    logic [NUM_RESOURCES-1:0][NUM_AGENTS-1:0] requests_2;
     logic [PORT_NUM-1:0][VC_NUM-1:0] is_available_vc, is_available_vc_next;
     logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set_w;
-    logic [PORT_NUM-1:0][VC_NUM-1:0] vc_request;
-    logic [PORT_NUM-1:0][VC_NUM-1:0] vc_grant;
-    logic [PORT_NUM-1:0] port_has_request;
 
     generate
-        for (genvar i = 0; i < PORT_NUM; i++) begin
-            for (genvar j = 0; j < VC_NUM; j++) begin
-                round_robin_arbiter #(
-                 .AGENTS_NUM(PORT_NUM)
-                ) rr_arbiter (
-                    .rst(rst),
-                    .clk(clk),
-                    .requests_i(port_request[i][j]),
-                    .grants_o(port_grant[i][j])
-                );
-            end
+        for (genvar i = 0; i < NUM_AGENTS; i++) begin
+            round_robin_arbiter #(
+                .AGENTS_NUM(NUM_RESOURCES)
+            ) rr_1 (
+                .rst(rst),
+                .clk(clk),
+                .requests_i(requests_1[i]),
+                .grants_o(grants_1[i])
+            );
         end
     endgenerate
 
     generate
-    for (genvar p = 0; p < PORT_NUM; p++) begin
-
+    for (genvar p = 0; p < NUM_RESOURCES; p++) begin
         round_robin_arbiter #(
-            .AGENTS_NUM(VC_NUM)
-        ) vc_rr (
+            .AGENTS_NUM(NUM_AGENTS)
+        ) rr_2 (
             .rst(rst),
             .clk(clk),
-            .requests_i(vc_request[p]),
-            .grants_o(vc_grant[p])
+            .requests_i(requests_2[p]),
+            .grants_o(grants_2[p])
         );
-
     end
     endgenerate
 
@@ -82,11 +79,6 @@ module vc_allocator #(
     */
     always_comb
     begin
-        port_request = '0;
-        vc_request = '0;
-        selected_out_port = '0;
-        selected_out_vc = '0;
-        port_has_request = '0;
 
         is_available_vc_next = is_available_vc;
 
@@ -101,50 +93,27 @@ module vc_allocator #(
 
         eligible_vc_set_w = eligible_vc_set(ib_if.out_port_mask, idle_downstream_vc_i, ib_if.credits_exist, ib_if.vc_class);
 
-        for(int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1)
-        begin
-            for(int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1)
-            begin
-                port_request[up_port][up_vc] = agents_mask(eligible_vc_set_w[up_port][up_vc]);
+        requests_1 = eligible_vc_set_w;
+
+        for (int agent = 0; agent < NUM_AGENTS; agent = agent + 1) begin
+            for (int resource = 0; resource < NUM_RESOURCES; resource = resource + 1) begin
+                requests_2[resource][agent] = grants_1[agent][resource];
             end
         end
 
-        for (int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1) begin
-            for (int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1) begin
-                for (int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1) begin
-                    if (port_grant[up_port][up_vc][down_port]) begin
-                        port_has_request[down_port] = 1'b1;
+        for (int resource = 0; resource < NUM_RESOURCES; resource = resource + 1) begin
+            for (int agent = 0; agent < NUM_AGENTS; agent = agent + 1) begin
+                if (grants_2[resource][agent]) begin
+                    int up_port = agent / VC_NUM;
+                    int up_vc = agent % VC_NUM;
+                    int down_port = resource / VC_NUM;
+                    int down_vc = resource % VC_NUM;
+                    ib_if.vc_new[up_port][up_vc] = down_vc;
+                    ib_if.vc_valid[up_port][up_vc] = 1'b1;
+                    is_available_vc_next[down_port][down_vc] = 1'b0;
                     end  
                 end
             end
-        end
-
-        foreach (port_has_request[down_port]) begin
-            if (port_has_request[down_port])
-                vc_request[down_port] = is_available_vc[down_port];
-            else vc_request[down_port] = '0;
-        end  
-      
-        for (int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1) begin
-            for (int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1) begin
-                if (vc_grant[down_port][down_vc]) begin
-                    selected_out_vc[down_port] = down_vc;
-                end
-            end
-        end
-
-        for (int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1) begin
-            for (int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1) begin
-                for (int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1) begin
-                    if (port_grant[up_port][up_vc][down_port]) begin
-                        selected_out_port[up_port][up_vc] = down_port;
-                        ib_if.vc_new[up_port][up_vc] = selected_out_vc[down_port];
-                        ib_if.vc_valid[up_port][up_vc] = 1'b1;
-                        is_available_vc_next[selected_out_port[up_port][up_vc]][ib_if.vc_new[up_port][up_vc]] = 1'b0;
-                    end  
-                end
-            end
-        end
 
         for(int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1)
         begin
@@ -156,9 +125,7 @@ module vc_allocator #(
                 end
             end
         end
-        
     end
-
     //Functions
 
     function automatic logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set (
@@ -169,11 +136,11 @@ module vc_allocator #(
         );
 
         logic class_valid;
+        logic is_escape_up;
         eligible_vc_set = '0;
 
         foreach (out_port_mask[up_port]) begin
              foreach (out_port_mask[up_port][up_vc]) begin
-                logic is_escape_up;
                 is_escape_up = (vc_class[up_port][up_vc] == ESCAPE); 
                 foreach (out_port_mask[up_port][up_vc][down_port]) begin
                     if (out_port_mask[up_port][up_vc][down_port]) begin
@@ -187,36 +154,6 @@ module vc_allocator #(
                 end
             end
         end
-    endfunction
-
-    function automatic logic [PORT_NUM-1:0] agents_mask (
-        input logic [PORT_NUM-1:0][VC_NUM-1:0] eligible_per_input_vc
-    );
-        
-        int max_counter = 0;
-        logic any_valid = 0;
-        agents_mask = '0;
-
-        for (int down_port = 0; down_port < PORT_NUM; down_port ++) begin
-            int count = 0;
-            for (int down_vc = 0; down_vc < VC_NUM; down_vc ++) begin
-                if (eligible_per_input_vc[down_port][down_vc]) begin
-                    count++;
-                    any_valid = 1'b1;
-                end
-            end
-            if (count > max_counter) begin
-                max_counter = count;
-                agents_mask = '0;
-                agents_mask[down_port] = 1'b1;
-            end 
-            else if (count == max_counter && count != 0) begin
-                agents_mask[down_port] = 1'b1;
-            end            
-        end
-        if (!any_valid) begin
-                agents_mask = '0;
-            end 
     endfunction
 
 endmodule
