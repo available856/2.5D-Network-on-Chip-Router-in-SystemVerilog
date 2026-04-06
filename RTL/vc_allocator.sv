@@ -1,5 +1,12 @@
 import noc_params::*;
 
+// ------------------------------------------------------------
+// Virtual Channel Allocator (Separable Input-First, Flattened)
+// - Allocates (output port, VC) pairs to upstream VCs
+// - Uses 2-stage arbitration over flattened resources
+// - Guarantees one-to-one mapping (no collisions)
+// ------------------------------------------------------------
+
 module vc_allocator #(
 )(
     input rst,
@@ -8,8 +15,13 @@ module vc_allocator #(
     input_block2vc_allocator.vc_allocator ib_if
 );
 
-    localparam NUM_RESOURCES = PORT_NUM * VC_NUM; //Down VCs on downstream ports
+    // Number of resources ((port, VC) pairs)
+    localparam NUM_RESOURCES = PORT_NUM * VC_NUM; // Total downstream VC resources (port × VC)
+    // Number of requesting agents (input VCs)
     localparam NUM_AGENTS = PORT_NUM * VC_NUM; //Up VCs on upstream ports
+    /* Flattened index mapping:
+    agent_id  = up_port * VC_NUM + up_vc
+    resource_id = down_port * VC_NUM + down_vc */
 
     
     logic [NUM_AGENTS-1:0][NUM_RESOURCES-1:0] requests_1;
@@ -19,6 +31,12 @@ module vc_allocator #(
     logic [PORT_NUM-1:0][VC_NUM-1:0] is_available_vc, is_available_vc_next;
     logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set_w;
 
+
+    // ------------------------------------------------------------
+    // Stage 1 Arbitration (Input-side)
+    // Each agent selects exactly ONE desired resource
+    // Output is one-hot per agent (grant_stage1)
+    // ------------------------------------------------------------
     generate
         for (genvar i = 0; i < NUM_AGENTS; i++) begin
             round_robin_arbiter #(
@@ -32,6 +50,11 @@ module vc_allocator #(
         end
     endgenerate
 
+    // ------------------------------------------------------------
+    // Stage 2 Arbitration (Output-side)
+    // Each resource selects exactly ONE winning agent
+    // Guarantees exclusive allocation per (port, VC)
+    // ------------------------------------------------------------
     generate
     for (genvar p = 0; p < NUM_RESOURCES; p++) begin
         round_robin_arbiter #(
@@ -63,20 +86,7 @@ module vc_allocator #(
         end
     end
 
-    /*
-    Combinational logic:
-    - compute the request matrix for the internal Separable Input-First
-      Allocator, by setting to 1 the upstream Virtual Channels which are
-      requesting for the allocation of a downstream Virtual Channel and
-      whose associated downstream Input Port has at least one available
-      Virtual Channel;
-    - compute the outputs of the module from the grants matrix obtained
-      from the Separable Input-First allocator and update the next
-      value for the availability of downstream Virtual Channels if
-      they have just been allocated;
-    - update the next value for the availability of downstream Virtual
-      Channels after their eventual deallocations.
-    */
+    
     always_comb
     begin
 
@@ -93,20 +103,42 @@ module vc_allocator #(
 
         eligible_vc_set_w = eligible_vc_set(ib_if.out_port_mask, idle_downstream_vc_i, ib_if.credits_exist, ib_if.vc_class);
 
+        // ------------------------------------------------------------
+        // Stage 1 Requests (Agent → Resource)
+        // Each agent requests all eligible (port, VC) resources
+        // Result: req_stage1[agent][resource]
+        // ------------------------------------------------------------
         requests_1 = eligible_vc_set_w;
 
+
+        // ------------------------------------------------------------
+        // Transpose (No logic, only wiring)
+        // Converts:
+        //   grant_stage1[agent][resource]
+        // → req_stage2[resource][agent]
+        // So each resource sees all requesting agents
+        // ------------------------------------------------------------
         for (int agent = 0; agent < NUM_AGENTS; agent = agent + 1) begin
             for (int resource = 0; resource < NUM_RESOURCES; resource = resource + 1) begin
                 requests_2[resource][agent] = grants_1[agent][resource];
             end
         end
 
+        
+        // ------------------------------------------------------------
+        // Final Allocation (Handshake)
+        // Allocation occurs ONLY if agent wins Stage 2:
+        //   grant_stage2[resource][agent] == 1
+        // This enforces:
+        // - No collisions
+        // - One-to-one mapping
+        // ------------------------------------------------------------
         for (int resource = 0; resource < NUM_RESOURCES; resource = resource + 1) begin
             for (int agent = 0; agent < NUM_AGENTS; agent = agent + 1) begin
                 if (grants_2[resource][agent]) begin
                     int up_port = agent / VC_NUM;
                     int up_vc = agent % VC_NUM;
-                    int down_port = resource / VC_NUM;
+                    int down_port = resource / VC_NUM; // Decode flattened resource index into hardware coordinates
                     int down_vc = resource % VC_NUM;
                     ib_if.vc_new[up_port][up_vc] = down_vc;
                     ib_if.vc_valid[up_port][up_vc] = 1'b1;
@@ -115,6 +147,13 @@ module vc_allocator #(
                 end
             end
 
+
+        // ------------------------------------------------------------
+        // VC State Update
+        // - Mark VC as unavailable on successful allocation
+        // - Release VC only when downstream signals idle
+        // (Conservative reallocation policy)
+        // ------------------------------------------------------------
         for(int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1)
         begin
             for(int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1)
@@ -126,8 +165,16 @@ module vc_allocator #(
             end
         end
     end
-    //Functions
+    
 
+    // ------------------------------------------------------------
+    // Eligibility Computation
+    // Determines valid (agent → resource) pairs based on:
+    // - Routing (out_port_mask)
+    // - VC availability
+    // - Credit availability
+    // - VC class constraints (deadlock avoidance)
+    // ------------------------------------------------------------
     function automatic logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set (
         input logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] out_port_mask,
         input logic [PORT_NUM-1:0][VC_NUM-1:0] is_idle_vc,
