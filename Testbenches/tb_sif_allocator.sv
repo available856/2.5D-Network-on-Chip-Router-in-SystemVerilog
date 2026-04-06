@@ -13,9 +13,7 @@ port_t out_port_i [PORT_NUM-1:0][VC_NUM-1:0];
 logic [PORT_NUM-1:0][VC_NUM-1:0] grant_o;
 
 // DUT instance
-separable_input_first_allocator #(
-    .VC_NUM(VC_NUM)
-) dut (.*);
+separable_input_first_allocator dut (.*);
 
 //Clock generation
 always #(CLK_PERIOD/2) clk = ~clk;
@@ -41,22 +39,14 @@ task reset_dut;
         end
 
         repeat(2) @(posedge clk);
+        #1; // small delay to step past the active clock edge
         rst = 0;
     end
 endtask
 
 initial begin
     clk = 0;
-    rst = 1;
-    request_i = '0;
-    foreach (out_port_i[i]) begin
-        foreach (out_port_i[i][j]) begin
-            out_port_i[i][j] = LOCAL; // Default to LOCAL, can be changed in tests
-        end
-    end
-
-    repeat (2) @(posedge clk); //Reset phase
-    rst = 0;
+    reset_dut;
 
     // ----------------------------
     // Test 1: Different VCs same input, same output ports
@@ -79,7 +69,7 @@ initial begin
     // ----------------------------
     reset_dut;
 
-    $display("[%0t]-Test 2: Different VCs same input, different output ports", $time);
+    $display("[%0t]-Test 2: Different VCs same input port, different output ports", $time);
     request_i[0] = 2'b11; // Both VCs at input port 0 request
     out_port_i[0][0] = EAST; // VC0 requests output port 0, VC1 requests output port 1
     out_port_i[0][1] = WEST; // Both VCs request the same output port
