@@ -175,7 +175,7 @@ begin
           if (vc_valid_i || read_cmd)
             begin
               error_next = 1;
-              ss_next = IDLE;
+              ss_next = ss;
             end
 
           if (write_cmd && data_i.flit_label == HEADTAIL)
@@ -200,7 +200,7 @@ begin
           if (vc_valid_i || read_cmd || peek_o.flit_label == BODY || peek_o.flit_label == TAIL)
             begin
               error_next = 1;
-              ss_next = IDLE;
+              ss_next = ss;
             end
         end
         
@@ -217,7 +217,7 @@ begin
             if((write_cmd && (end_packet || data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)) || read_cmd)
             begin
                 error_next = 1;
-                ss_next = VA;
+                ss_next = ss;
             end
 
             if(write_cmd && data_i.flit_label == TAIL)
@@ -243,6 +243,7 @@ begin
             if(vc_valid_i || (write_cmd && (end_packet || data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)))
             begin
                 error_next = 1;
+                ss_next = ss;
             end
 
             if(write_cmd && data_i.flit_label == TAIL)
