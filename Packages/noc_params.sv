@@ -63,8 +63,6 @@ package noc_params;
     } flit_t;
 
     //2-bit vector - Parallel credits
-    typedef struct packed {
-        logic [VC_NUM-1:0] credit_valid; //VC[i] freed one slot this cycle
-    } credit_t;                          
+    typedef logic [VC_NUM-1:0] credits_t;                          
 
 endpackage
