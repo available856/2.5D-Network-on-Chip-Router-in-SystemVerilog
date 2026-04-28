@@ -15,6 +15,7 @@ package noc_params;
     localparam VC_NUM   = 2;
     localparam VC_SIZE  = $clog2(VC_NUM);
     localparam VC_DEPTH = 4;
+    localparam VC_COUNT = $clog2(VC_DEPTH);
 
     localparam FLIT_WIDTH = 64; //Renamed
 
@@ -60,5 +61,10 @@ package noc_params;
             logic [BODY_PAYLOAD_SIZE-1 : 0] bt_pl;     // [61:0] if Body
         } data;
     } flit_t;
+
+    //2-bit vector - Parallel credits
+    typedef struct packed {
+        logic [VC_NUM-1:0] credit_valid; //VC[i] freed one slot this cycle
+    } credit_t;                          
 
 endpackage

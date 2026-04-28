@@ -1,9 +1,8 @@
-`timescale 1ns/1ps
-
 import noc_params::*;
 
 module vc_buffer #(
-    parameter BUFFER_SIZE = VC_DEPTH
+    parameter BUFFER_SIZE = VC_DEPTH,
+    parameter VC_ID = 0
 )(
     input flit_t data_i,
     input read_i,
@@ -22,7 +21,8 @@ module vc_buffer #(
     output logic switch_request_o,
     output logic vc_allocatable_o,
     output logic [VC_SIZE-1:0] downstream_vc_o,
-    output logic error_o
+    output logic error_o,
+    output vc_class_t vc_class_o
 );
 
 enum logic [1:0] {IDLE, RC, VA, SA} ss, ss_next;
@@ -32,8 +32,10 @@ logic read_cmd, write_cmd;
 logic end_packet, end_packet_next;
 logic vc_allocatable_next;
 logic error_next;
-port_t latched_out_port;
 port_t out_port_next;
+
+assign vc_class_o = (VC_ID == 0) ? ESCAPE : ADAPTIVE;
+
 
 //flit_t peek_flit;
 //flit_t read_flit;
@@ -99,18 +101,6 @@ begin
     end
 end
 
-/*
- Latch output port only when a HEAD/HEADTAIL flit is successfully written.
- Prevents dependence on transient upstream routing signals.
-*/
-always_ff @(posedge clk, posedge rst) begin
-    if (rst) begin
-        latched_out_port <= LOCAL;
-    end
-    else if (write_cmd && (data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)) begin
-        latched_out_port <= out_port_i;
-    end
-end
 
 /*
  Architectural event signals:
@@ -191,13 +181,12 @@ begin
         */
         RC: 
         begin
-          if (peek_o.flit_label == HEAD || peek_o.flit_label == HEADTAIL)
+          if (!is_empty_o && (peek_o.flit_label == HEAD || peek_o.flit_label == HEADTAIL))
             begin
               ss_next = VA;
-              out_port_next = latched_out_port;
             end
         
-          if (vc_valid_i || read_cmd || peek_o.flit_label == BODY || peek_o.flit_label == TAIL)
+          if (vc_valid_i || read_cmd || (!is_empty_o && (peek_o.flit_label == BODY || peek_o.flit_label == TAIL)))
             begin
               error_next = 1;
               ss_next = ss;
@@ -210,6 +199,7 @@ begin
             begin
                 ss_next = SA;
                 downstream_vc_next = vc_new_i;
+                out_port_next = out_port_i;
             end
 
             vc_request_o = 1;
