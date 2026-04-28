@@ -6,15 +6,18 @@ interface input_block2vc_allocator;
     logic [VC_NUM-1:0] vc_valid [PORT_NUM-1:0];    //Upstream validation after allocation of downstream VC
     logic [VC_NUM-1:0] vc_request [PORT_NUM-1:0];  //Upstream request for downstream VC allocation
     port_t [VC_NUM-1:0] port_new [PORT_NUM-1:0];
-    logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] out_port_mask;
+    logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] out_port_set; // Output port mask for each upstream agent (port, vc) indicating which downstream ports are eligible based on route computation
     logic [PORT_NUM-1:0][VC_NUM-1:0] credits_exist;
     vc_class_t [PORT_NUM-1:0][VC_NUM-1:0] vc_class;
 
     modport input_block (
         input vc_new,
         input vc_valid,
-        output vc_request
-  //      output out_port
+        input port_new,
+        output vc_request,
+        output out_port_set,
+        output credits_exist,
+        output vc_class
     );
 
     modport vc_allocator (
@@ -22,7 +25,7 @@ interface input_block2vc_allocator;
         output vc_valid,
         output port_new,
         input vc_request,
-        input out_port_mask,
+        input out_port_set,
         input credits_exist,
         input vc_class
     );
