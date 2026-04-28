@@ -7,7 +7,7 @@ module input_block #(
 )(
     input flit_t data_i [PORT_NUM-1:0],
     input valid_flit_i [PORT_NUM-1:0],
-    input logic [PORT_NUM-1:0][VC_NUM-1:0] credit_return_i,
+    input credit_t credit_return_i [PORT_NUM-1:0],
     input rst,
     input clk,
     input_block2crossbar.input_block crossbar_if,
@@ -25,7 +25,7 @@ module input_block #(
 
     logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT-1:0] credits_counter;
     logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT-1:0] credits_counter_next ;
-    logic credits_exist [PORT_NUM-1:0][VC_NUM-1:0];
+    logic [PORT_NUM-1:0][VC_NUM-1:0] credits_exist; 
     logic [PORT_NUM-1:0][VC_NUM-1:0] flit_consumed; // Indicates if a flit has been consumed from the output port and VC
     
 
@@ -110,7 +110,7 @@ module input_block #(
             
     for (int down_port = 0; down_port < PORT_NUM; down_port++) begin
         for (int down_vc = 0; down_vc < VC_NUM; down_vc++) begin
-            case ({flit_consumed[down_port][down_vc], credit_return_i[down_port][down_vc]})
+            case ({flit_consumed[down_port][down_vc], credit_return_i[down_port].credit_valid[down_vc]})
                 2'b01: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == VC_DEPTH) ? VC_DEPTH : credits_counter[down_port][down_vc] + 1;
                 2'b10: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == 0) ? 0 : credits_counter[down_port][down_vc] - 1;
                 default : credits_counter_next[down_port][down_vc] = credits_counter[down_port][down_vc];
