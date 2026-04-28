@@ -7,7 +7,7 @@ interface input_block2switch_allocator;
     logic valid_sel [PORT_NUM-1:0];
     logic [VC_SIZE-1:0] downstream_vc [PORT_NUM-1:0][VC_NUM-1:0];
     logic switch_request [PORT_NUM-1:0][VC_NUM-1:0];    //from Input Buffer, asserted when in SA state
-    logic credits_exist [PORT_NUM-1:0][VC_NUM-1:0];
+    logic [PORT_NUM-1:0][VC_NUM-1:0] credits_exist;
 
     modport input_block (
         input vc_sel,
