@@ -110,7 +110,7 @@ module input_block #(
             
     for (int down_port = 0; down_port < PORT_NUM; down_port++) begin
         for (int down_vc = 0; down_vc < VC_NUM; down_vc++) begin
-            case ({flit_consumed[down_port][down_vc], credit_return_i[down_port].credit_valid[down_vc]})
+            case ({flit_consumed[down_port][down_vc], credit_return_i[down_port][down_vc]})
                 2'b01: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == VC_DEPTH) ? VC_DEPTH : credits_counter[down_port][down_vc] + 1;
                 2'b10: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == 0) ? 0 : credits_counter[down_port][down_vc] - 1;
                 default : credits_counter_next[down_port][down_vc] = credits_counter[down_port][down_vc];

@@ -21,6 +21,7 @@ module input_port #(
     output logic [VC_SIZE-1:0] sa_downstream_vc_o [VC_NUM-1:0],
     output port_t [VC_NUM-1:0] out_port_o,
     output logic [VC_NUM-1:0][PORT_NUM-1:0] out_port_set_o,
+    output credit_t credit_return_o,
     output logic [VC_NUM-1:0] is_full_o,
     output logic [VC_NUM-1:0] is_empty_o,
     output logic [VC_NUM-1:0] error_o,
@@ -32,6 +33,7 @@ module input_port #(
 
 
     logic [VC_NUM-1:0] read_cmd;
+    logic [VC_NUM-1:0] read_cmd_q;
     logic [VC_NUM-1:0] write_cmd;
 
     logic [VC_NUM-1:0][DEST_ADDR_SIZE_X-1:0] x_dest;
@@ -39,6 +41,16 @@ module input_port #(
     logic [VC_NUM-1:0] rc_valid;
     logic [VC_NUM-1:0][PORT_NUM-1:0] rc_product;
 
+    assign credit_return_o = read_cmd_q; // Return credit for the VC that was read in the previous cycle
+
+    always_ff @(posedge clk, posedge rst) begin
+        if (rst) begin
+            read_cmd_q <= '0;
+        end 
+        else begin
+            read_cmd_q <= read_cmd;
+        end
+    end
     
     generate
         for(genvar vc=0; vc<VC_NUM; vc++)
@@ -114,6 +126,7 @@ module input_port #(
         if(sa_valid_i)
             read_cmd[sa_sel_vc_i] = 1;
         xb_flit_o = data_out[sa_sel_vc_i];
+
     end
 
 endmodule
