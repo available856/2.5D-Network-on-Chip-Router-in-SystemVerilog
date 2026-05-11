@@ -79,7 +79,7 @@ end
 endtask
 
 task receive_flit_simple (input logic [VC_SIZE-1:0] vc_idx, input flit_label_t label, input logic [DEST_ADDR_SIZE_X-1:0] x_dest, input logic [DEST_ADDR_SIZE_Y-1:0] y_dest,
-input logic [HEAD_PAYLOAD_SIZE-1:0] head_data,input logic [BODY_PAYLOAD_SIZE-1:0] body_data);
+input logic [HEAD_PAYLOAD_SIZE-1:0] head_data, input logic [BODY_PAYLOAD_SIZE-1:0] body_data);
 flit_t data;
 begin
     data = '0;
@@ -90,12 +90,10 @@ begin
         data = {label, body_data};
     end
 
-
     @(negedge clk);
     data_i = data;
     valid_flit_i[vc_idx] = 1'b1;
 
-    
     @(posedge clk); #1;
     if (label == HEAD || label == HEADTAIL) begin
         $display("[%0t]-Flit received with label=%s, x_dest=%d, y_dest=%d, data=0x%h", $time, label.name(), x_dest, y_dest, head_data);
@@ -103,25 +101,7 @@ begin
     else begin
         $display("[%0t]-Flit received with label=%s, data=0x%h", $time, label.name(), data_i);
     end
-    $display("Total flit: 0x%h", data);
-
-    if (vc_idx == 0) begin
-        if (dut.generate_virtual_channels[0].vc_buffer.peek_o == data_i) begin
-            $display("[%0t]-Peeked flit matches input data", $time);
-        end 
-        else begin
-            $error("[%0t]-Error: Peeked flit does not match input data. Expected: %h, Got: %h", $time, data_i, dut.generate_virtual_channels[0].vc_buffer.peek_o);
-        end
-    end
-    else begin
-        if (dut.generate_virtual_channels[1].vc_buffer.peek_o == data_i) begin
-            $display("[%0t]-Peeked flit matches input data", $time);
-        end 
-        else begin
-            $error("[%0t]-Error: Peeked flit does not match input data. Expected: %h, Got: %h", $time, data_i, dut.generate_virtual_channels[1].vc_buffer.peek_o);
-        end
-    end
-    
+    $display("Total flit: 0x%h", data);   
 
     @(negedge clk);
     valid_flit_i[vc_idx] = 1'b0;
@@ -154,6 +134,22 @@ begin
         sa_valid_i = 1'b1;
         #1;
         $display("[%0t]-Selected upstream VC %d for SA and xb_flit_o=0x%h", $time, sa_sel_vc_i, xb_flit_o);
+        if (vc_idx == 1) begin
+            if (dut.generate_virtual_channels[1].vc_buffer.peek_o != xb_flit_o) begin
+                $error("[%0t]-Error: xb_flit_o does not match the expected flit from the buffer peek", $time);
+            end
+            else begin
+                $display("[%0t]-xb_flit_o=0x%h and expected flit=0x%h", $time, xb_flit_o, dut.generate_virtual_channels[1].vc_buffer.peek_o);
+            end
+        end
+        else begin
+            if (dut.generate_virtual_channels[0].vc_buffer.peek_o != xb_flit_o) begin
+                $error("[%0t]-Error: xb_flit_o does not match the expected flit from the buffer peek", $time);
+            end
+            else begin
+                $display("[%0t]-xb_flit_o=0x%h and expected flit=0x%h", $time, xb_flit_o, dut.generate_virtual_channels[0].vc_buffer.peek_o);
+            end
+        end
         @(negedge clk);
         sa_valid_i = 1'b0;
     end
@@ -207,6 +203,16 @@ initial begin
     wait (sa_request_o[1] == 1'b1);
     $display("[%0t]-SA request for VC 1 observed", $time);    
     switch_allocation(1); 
+    receive_flit_simple(1, HEAD, 2, 1, HEAD_PAYLOAD_SIZE'({$urandom(), $urandom()}), 0);
+    wait (va_request_o[1] == 1'b1);
+    receive_flit_simple(1, BODY, 0, 0, 0, BODY_PAYLOAD_SIZE'({$urandom(), $urandom()}));
+    receive_flit_simple(1, BODY, 0, 0, 0, BODY_PAYLOAD_SIZE'({$urandom(), $urandom()}));
+    receive_flit_simple(1, TAIL, 0, 0, 0, BODY_PAYLOAD_SIZE'({$urandom(), $urandom()}));
+    $display("[%0t]-VA request for VC 1 observed", $time);
+    virtual_channel_allocation(1);
+    wait (sa_request_o[1] == 1'b1);
+    $display("[%0t]-SA request for VC 1 observed", $time);    
+    repeat (4) switch_allocation(1);
 
 $finish;
 end
