@@ -103,6 +103,7 @@ begin
     else begin
         $display("[%0t]-Flit received with label=%s, data=0x%h", $time, label.name(), data_i);
     end
+    $display("Total flit: 0x%h", data);
 
     if (vc_idx == 0) begin
         if (dut.generate_virtual_channels[0].vc_buffer.peek_o == data_i) begin
@@ -127,15 +128,73 @@ begin
 end
 endtask
 
-task virtual_channel_allocation (); 
-
+task virtual_channel_allocation (input logic [VC_SIZE-1:0] vc_idx); 
+begin
+    @(negedge clk);
+    if (va_request_o[vc_idx]) begin
+        $display("[%0t]-Responding to VA request for VC %d", $time, vc_idx);
+        select_va_port(vc_idx);
+        select_va_down_vc(vc_idx);
+        va_valid_i[vc_idx] = 1'b1;
+        #1;
+        $display("[%0t]-Port_new=%s, va_new_vc=%d", $time, port_new_i[vc_idx].name(), va_new_vc_i[vc_idx]);
+        @(negedge clk);
+        va_valid_i[vc_idx] = 1'b0;
+    end
+end
 endtask
+
+task switch_allocation (input logic [VC_SIZE-1:0] vc_idx); 
+begin
+    @(negedge clk);
+    if (sa_request_o[vc_idx]) begin
+        $display("[%0t]-Responding to SA request for VC %d", $time, vc_idx);
+        sa_sel_vc_i = vc_idx; // Select the requesting VC for switch allocation
+        sa_downstream_vc_o[vc_idx] = va_new_vc_i[vc_idx]; // Use the same downstream VC assigned during VA for testing
+        sa_valid_i = 1'b1;
+        #1;
+        $display("[%0t]-Selected upstream VC %d for SA and xb_flit_o=0x%h", $time, sa_sel_vc_i, xb_flit_o);
+        @(negedge clk);
+        sa_valid_i = 1'b0;
+    end
+end
+endtask
+
+
+
+task select_va_port (input logic [VC_SIZE-1:0] vc_idx);
+port_t last_port; 
+begin
+    for (int i = 0; i < PORT_NUM; i++) begin  
+        if (out_port_set_o[vc_idx][i]) begin
+            last_port = port_t'(i);
+        end
+    end
+    port_new_i[vc_idx] = last_port;
+end
+endtask
+
+task select_va_down_vc (input logic [VC_SIZE-1:0] vc_idx);
+begin
+    if (vc_class_o[vc_idx] == ESCAPE) begin
+        va_new_vc_i[vc_idx] = 0; // Assign escape VC
+    end
+    else begin
+        va_new_vc_i[vc_idx] = VC_SIZE'($urandom_range(0, VC_NUM-1)); // Randomly assign a downstream VC for testing
+    end 
+end
+endtask
+
+
 
 always @(posedge clk) begin
     #2; // Small delay to allow outputs to stabilize before printing
     $display("[%0t]-Outputs: xb_flit_o=0x%h, is_allocatable_vc_o=%b, va_request_o=%b, sa_request_o=%b, sa_downstream_vc_o=%b, out_port_o=%s, out_port_set_o [E W S N L] =%b, credit_return_o=%h, is_full_o=%b, is_empty_o=%b, error_o=%b, vc_class_o=%s", 
         $time, xb_flit_o, is_allocatable_vc_o[1], va_request_o[1], sa_request_o[1], sa_downstream_vc_o[1], out_port_o[1].name(), out_port_set_o[1], credit_return_o[1], is_full_o[1], is_empty_o[1], error_o[1], vc_class_o[1].name());
 end
+
+
+
 
 initial begin
     reset_dut();
@@ -144,7 +203,10 @@ initial begin
     receive_flit_simple(1, HEADTAIL, 0, 3, HEAD_PAYLOAD_SIZE'({$urandom(), $urandom()}), 0);
     wait (va_request_o[1] == 1'b1);
     $display("[%0t]-VA request for VC 1 observed", $time);
-    @(posedge clk);     
+    virtual_channel_allocation(1);
+    wait (sa_request_o[1] == 1'b1);
+    $display("[%0t]-SA request for VC 1 observed", $time);    
+    switch_allocation(1); 
 
 $finish;
 end
