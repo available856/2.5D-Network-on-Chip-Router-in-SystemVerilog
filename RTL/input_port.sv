@@ -10,8 +10,8 @@ module input_port #(
     input port_t [VC_NUM-1:0] port_new_i,
     input rst,
     input clk,
-    input [VC_SIZE-1:0] sa_sel_vc_i,
-    input [VC_SIZE-1:0] va_new_vc_i [VC_NUM-1:0],
+    input [VC_SIZE-1:0] sa_sel_vc_i,  //From this upstream port, which VC is granted for SA
+    input [VC_SIZE-1:0] va_new_vc_i [VC_NUM-1:0], //Which downstream VC is allocated by VA to each upstream VC
     input [VC_NUM-1:0] va_valid_i,
     input sa_valid_i,
     output flit_t xb_flit_o,
@@ -21,7 +21,7 @@ module input_port #(
     output logic [VC_SIZE-1:0] sa_downstream_vc_o [VC_NUM-1:0],
     output port_t [VC_NUM-1:0] out_port_o,
     output logic [VC_NUM-1:0][PORT_NUM-1:0] out_port_set_o,
-    output credit_t credit_return_o,
+    output credits_t credit_return_o,
     output logic [VC_NUM-1:0] is_full_o,
     output logic [VC_NUM-1:0] is_empty_o,
     output logic [VC_NUM-1:0] error_o,
@@ -33,22 +33,22 @@ module input_port #(
 
 
     logic [VC_NUM-1:0] read_cmd;
-    logic [VC_NUM-1:0] read_cmd_q;
+    logic [VC_NUM-1:0] read_cmd_latched;
     logic [VC_NUM-1:0] write_cmd;
 
     logic [VC_NUM-1:0][DEST_ADDR_SIZE_X-1:0] x_dest;
     logic [VC_NUM-1:0][DEST_ADDR_SIZE_Y-1:0] y_dest;
     logic [VC_NUM-1:0] rc_valid;
-    logic [VC_NUM-1:0][PORT_NUM-1:0] rc_product;
 
-    assign credit_return_o = read_cmd_q; // Return credit for the VC that was read in the previous cycle
+
+    assign credit_return_o = read_cmd_latched; // Return credit for the VC that was read in the previous cycle
 
     always_ff @(posedge clk, posedge rst) begin
         if (rst) begin
-            read_cmd_q <= '0;
+            read_cmd_latched <= '0;
         end 
         else begin
-            read_cmd_q <= read_cmd;
+            read_cmd_latched <= read_cmd;
         end
     end
     
@@ -92,9 +92,9 @@ module input_port #(
                 .x_dest_i(x_dest[vc]),
                 .y_dest_i(y_dest[vc]),
                 .vc_class_i(vc_class_o[vc]),
-                .eligible_port_set(rc_product[vc])
+                .rc_valid_i(rc_valid[vc]),
+                .eligible_port_set(out_port_set_o[vc])
             );
-            assign out_port_set_o[vc] = rc_valid[vc] ? rc_product[vc] : '0; // If RC is valid, use RC product; else, no eligible ports
         end
     endgenerate
 
@@ -123,9 +123,13 @@ module input_port #(
         write_cmd = valid_flit_i; // One-hot vector indicating which VC has a valid flit to write
 
         read_cmd = {VC_NUM{1'b0}};
-        if(sa_valid_i)
+        if(sa_valid_i && !is_empty_o[sa_sel_vc_i]) begin
             read_cmd[sa_sel_vc_i] = 1;
-        xb_flit_o = data_out[sa_sel_vc_i];
+            xb_flit_o = peek_o[sa_sel_vc_i];
+        end
+        else begin
+            xb_flit_o = '0;
+        end
 
     end
 
