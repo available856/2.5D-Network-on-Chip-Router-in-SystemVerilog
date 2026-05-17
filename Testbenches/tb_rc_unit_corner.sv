@@ -2,7 +2,7 @@
 
 import noc_params::*;
 
-module tb_rc_unit ();
+module tb_rc_unit_corner ();
 
 
 typedef enum logic [4:0] {
@@ -20,8 +20,8 @@ logic [PORT_NUM-1:0] eligible_port_set;
 logic rc_valid;
 
 rc_unit #(
-    .X_CURRENT(2),
-    .Y_CURRENT(2)
+    .X_CURRENT(0),
+    .Y_CURRENT(0)
 ) dut (
     .x_dest_i(dest_x),
     .y_dest_i(dest_y),
@@ -70,7 +70,7 @@ task test_x_movement_escape();
 
     vc_class = ESCAPE;
 
-    dest_x = 3; dest_y = 2; // Should go EAST
+    dest_x = 3; dest_y = 0; // Should go EAST
     expected_ports = TB_EAST;
     #1; 
     output_ports = port_e'(eligible_port_set);
@@ -86,13 +86,13 @@ task test_y_movement_escape();
 
     vc_class = ESCAPE;
 
-    dest_x = 2; dest_y = 1; // Should go SOUTH
-    expected_ports = TB_SOUTH;
+    dest_x = 0; dest_y = 3; // Should go NORTH
+    expected_ports = TB_NORTH;
     #1; 
     output_ports = port_e'(eligible_port_set);
     $display("[%0t]-Eligible port: %s", $time, output_ports.name());
     check_onehot("Test Y movement one-hot (ESCAPE)");
-    check_exact_port("Test Y movement SOUTH (ESCAPE)", expected_ports);
+    check_exact_port("Test Y movement NORTH (ESCAPE)", expected_ports);
     #1;
 endtask
 
@@ -102,7 +102,7 @@ task test_no_movement_escape();
 
     vc_class = ESCAPE;
 
-    dest_x = 2; dest_y = 2; // Should stay LOCAL
+    dest_x = 0; dest_y = 0; // Should stay LOCAL
     expected_ports = TB_LOCAL;
     #1; 
     output_ports = port_e'(eligible_port_set);
@@ -119,8 +119,8 @@ task test_xy_movement_adaptive();
 
     vc_class = ADAPTIVE;
 
-    dest_x = 0; dest_y = 3; // Should go WEST or NORTH
-    expected_ports = TB_WEST | TB_NORTH;
+    dest_x = 1; dest_y = 3; // Should go EAST or NORTH
+    expected_ports = TB_EAST | TB_NORTH;
     #1;
     for (int i = 0; i < PORT_NUM; i++) begin
         if (eligible_port_set[i]) begin
@@ -129,7 +129,7 @@ task test_xy_movement_adaptive();
         end
     end
     check_count("Test X and Y movement count (ADAPTIVE)", 2);
-    check_exact_port("Test X and Y movement WEST+NORTH (ADAPTIVE)", expected_ports);
+    check_exact_port("Test X and Y movement EAST+NORTH (ADAPTIVE)", expected_ports);
     #1;
 endtask
 
@@ -139,8 +139,8 @@ task test_single_dimension_adaptive();
 
     vc_class = ADAPTIVE;
 
-    dest_x = 0; dest_y = 2; // Should go WEST only
-    expected_ports = TB_WEST;
+    dest_x = 0; dest_y = 2; // Should go NORTH only
+    expected_ports = TB_NORTH;
 
     #1;
     for (int i = 0; i < PORT_NUM; i++) begin
@@ -149,8 +149,8 @@ task test_single_dimension_adaptive();
             $display("[%0t]-Eligible port: %s", $time, output_ports.name());
         end
     end
-    check_onehot("Test X movement only one-hot (ADAPTIVE)");
-    check_exact_port("Test X movement only WEST (ADAPTIVE)", expected_ports);
+    check_onehot("Test Y movement only one-hot (ADAPTIVE)");
+    check_exact_port("Test Y movement only NORTH (ADAPTIVE)", expected_ports);
     #1;
 endtask
 
@@ -161,7 +161,7 @@ test_no_movement_adaptive();
 
     vc_class = ADAPTIVE;
 
-    dest_x = 2; dest_y = 2; // Should stay LOCAL
+    dest_x = 0; dest_y = 0; // Should stay LOCAL
     expected_ports = TB_LOCAL;
     #1;
     for (int i = 0; i < PORT_NUM; i++) begin
@@ -182,7 +182,7 @@ test_no_eligible_ports();
 
     vc_class = ADAPTIVE;
 
-    dest_x = $urandom_range(0, 4); dest_y = $urandom_range(0, 4); // Random destination
+    dest_x = $urandom_range(0, 3); dest_y = $urandom_range(0, 3); // Random destination
     expected_ports = '0; // Eligible ports based on destination
     #1;
     for (int i = 0; i < PORT_NUM; i++) begin
