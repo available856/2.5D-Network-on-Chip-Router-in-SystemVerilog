@@ -203,13 +203,14 @@ initial begin
     wait (sa_request_o[1] == 1'b1);
     $display("[%0t]-SA request for VC 1 observed", $time);    
     switch_allocation(1); 
+
     receive_flit_simple(1, HEAD, 2, 1, HEAD_PAYLOAD_SIZE'({$urandom(), $urandom()}), 0);
     wait (va_request_o[1] == 1'b1);
+    $display("[%0t]-VA request for VC 1 observed", $time);
+    virtual_channel_allocation(1);
     receive_flit_simple(1, BODY, 0, 0, 0, BODY_PAYLOAD_SIZE'({$urandom(), $urandom()}));
     receive_flit_simple(1, BODY, 0, 0, 0, BODY_PAYLOAD_SIZE'({$urandom(), $urandom()}));
     receive_flit_simple(1, TAIL, 0, 0, 0, BODY_PAYLOAD_SIZE'({$urandom(), $urandom()}));
-    $display("[%0t]-VA request for VC 1 observed", $time);
-    virtual_channel_allocation(1);
     wait (sa_request_o[1] == 1'b1);
     $display("[%0t]-SA request for VC 1 observed", $time);    
     repeat (4) switch_allocation(1);
