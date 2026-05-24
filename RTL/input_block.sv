@@ -6,8 +6,8 @@ module input_block #(
     parameter Y_CURRENT = MESH_SIZE_Y/2
 )(
     input flit_t data_i [PORT_NUM-1:0],
-    input valid_flit_i [PORT_NUM-1:0],
-    input credit_t credit_return_i [PORT_NUM-1:0],
+    input [VC_NUM-1:0] valid_flit_i [PORT_NUM-1:0],
+    input credits_t credit_return_i [PORT_NUM-1:0],
     input rst,
     input clk,
     input_block2crossbar.input_block crossbar_if,
@@ -15,7 +15,8 @@ module input_block #(
     input_block2vc_allocator.input_block va_if,
     output logic [VC_NUM-1:0] vc_allocatable_o [PORT_NUM-1:0],
     output logic [VC_NUM-1:0] error_o [PORT_NUM-1:0],
-    output vc_class_t [PORT_NUM-1:0][VC_NUM-1:0] vc_class_o
+    output vc_class_t [PORT_NUM-1:0][VC_NUM-1:0] vc_class_o,
+    output credits_t credit_return_o [PORT_NUM-1:0]
 );
     
     logic [VC_NUM-1:0] is_full [PORT_NUM-1:0];
@@ -23,8 +24,8 @@ module input_block #(
 
     port_t [VC_NUM-1:0] out_port [PORT_NUM-1:0];
 
-    logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT-1:0] credits_counter;
-    logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT-1:0] credits_counter_next ;
+    logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_counter;
+    logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_counter_next ;
     logic [PORT_NUM-1:0][VC_NUM-1:0] credits_exist; 
     logic [PORT_NUM-1:0][VC_NUM-1:0] flit_consumed; // Indicates if a flit has been consumed from the output port and VC
     
@@ -35,9 +36,9 @@ module input_block #(
 
     always_ff @(posedge clk, posedge rst) begin
         if (rst) begin
-            for (int ip = 0; ip < PORT_NUM; ip++) begin
-                for (int vc = 0; vc < VC_NUM; vc++) begin
-                    credits_counter[ip][vc] <= VC_DEPTH;
+            for (int dp = 0; dp < PORT_NUM; dp++) begin
+                for (int dvc = 0; dvc < VC_NUM; dvc++) begin
+                    credits_counter[dp][dvc] <= VC_DEPTH;
                 end
             end
         end 
@@ -71,8 +72,9 @@ module input_block #(
                 .port_new_i(va_if.port_new[ip]),
                 .va_new_vc_i(va_if.vc_new[ip]),
                 .va_valid_i(va_if.vc_valid[ip]),
-                .sa_valid_i(sa_if.valid_sel[ip]),
+                .sa_valid_i(sa_if.valid_port_sel[ip]),
                 .xb_flit_o(crossbar_if.flit[ip]),
+                .credit_return_o(credit_return_o[ip]),
                 .is_allocatable_vc_o(vc_allocatable_o[ip]),
                 .va_request_o(va_if.vc_request[ip]),
                 .sa_request_o(sa_if.switch_request[ip]),
@@ -99,7 +101,7 @@ module input_block #(
 
 
     for (int up_port = 0; up_port < PORT_NUM; up_port++) begin
-        if (sa_if.valid_sel[up_port]) begin
+        if (sa_if.valid_port_sel[up_port]) begin
             automatic int up_vc = sa_if.vc_sel[up_port];
             automatic port_t down_port = sa_if.out_port[up_port][up_vc];
             automatic int down_vc = sa_if.downstream_vc[up_port][up_vc];
