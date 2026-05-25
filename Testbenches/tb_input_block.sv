@@ -22,6 +22,12 @@ credits_t credit_return_o [PORT_NUM-1:0];
 
 logic reset_done;
 
+//For simultaneous packet test
+port_t current_port [1:0];
+logic [VC_SIZE-1:0] vc_idx [1:0];
+logic [DEST_ADDR_SIZE_X-1:0] x_dest [1:0];
+logic [DEST_ADDR_SIZE_Y-1:0] y_dest [1:0];
+
 // -----------------------------
 // DUT instance
 // -----------------------------
@@ -301,12 +307,193 @@ begin
 end
 endtask
 
+task simultaneous_va (input port_t current_port [1:0], input logic [VC_SIZE-1:0] vc_idx [1:0]); 
+begin
+    @(negedge clk);
+    if (va_if.vc_request[current_port[0]][vc_idx[0]] && va_if.vc_request[current_port[1]][vc_idx[1]]) begin        
+        for (int i = 0; i < 2; i++) begin
+            $display("[%0t]-Responding to VA request for (port, VC) (%s, %d)", $time, current_port[i].name(), vc_idx[i]);
+            select_va_port(current_port[i], vc_idx[i]);        
+            select_va_down_vc(current_port[i], vc_idx[i]);                
+            va_if.vc_valid[current_port[i]][vc_idx[i]] = 1'b1;
+        end
+               
+        
+        #1; // Small delay to allow outputs to stabilize after clock edge
+
+        for (int i = 0; i < 2; i++) begin
+            $display("[%0t]-Port_new=%s, va_new_vc=%d", $time, va_if.port_new[current_port[i]][vc_idx[i]].name(), va_if.vc_new[current_port[i]][vc_idx[i]]);
+            $display("------------------------------\n");
+        end
+
+        @(negedge clk);
+        for (int i = 0; i < 2; i++) begin
+            va_if.vc_valid[current_port[i]][vc_idx[i]] = 1'b0;
+        end
+    end
+    else $error("[%0t]-Simultaneous VA requests not observed for the specified ports and VCs", $time);
+end
+endtask
+
+task simultaneous_sa (input port_t current_port [1:0], input logic [VC_SIZE-1:0] vc_idx [1:0]); 
+begin
+    @(negedge clk);
+    if ( (sa_if.switch_request[current_port[0]][vc_idx[0]] && sa_if.credits_exist[sa_if.out_port[current_port[0]][vc_idx[0]]][sa_if.downstream_vc[current_port[0]][vc_idx[0]]]) && (sa_if.switch_request[current_port[1]][vc_idx[1]] && sa_if.credits_exist[sa_if.out_port[current_port[1]][vc_idx[1]]][sa_if.downstream_vc[current_port[1]][vc_idx[1]]]) ) begin
+        for (int i = 0; i < 2; i++) begin
+            $display("[%0t]-Responding to SA request for port %s & VC %d", $time, current_port[i].name(), vc_idx[i]);
+            $display("------------------------------\n");
+
+            sa_if.vc_sel[current_port[i]] = vc_idx[i]; // Select the requesting VC for switch allocation
+            sa_if.downstream_vc[current_port[i]][vc_idx[i]] = va_if.vc_new[current_port[i]][vc_idx[i]]; // Use the same downstream VC assigned during VA for testing
+            sa_if.valid_port_sel[current_port[i]] = 1'b1;
+        end
+
+        #1; // Small delay to allow outputs to stabilize after clock edge
+
+        for (int i = 0; i < 2; i++) begin
+            $display("[%0t]-Selected upstream (port: %s, VC: %d) for SA and flit=0x%h", $time, current_port[i].name(), sa_if.vc_sel[current_port[i]], crossbar_if.flit[current_port[i]]);
+            $display("------------------------------\n");
+        end
+        
+        @(negedge clk);
+        for (int i = 0; i < 2; i++) begin
+            sa_if.valid_port_sel[current_port[i]] = 1'b0;
+        end
+    end
+
+    else $error("[%0t]-Simultaneous SA requests with valid credits not observed for the specified ports and VCs", $time);
+    
+end
+endtask
+
+task simultaneous_receive_flit (input port_t port[ 1:0], input logic [VC_SIZE-1:0] vc_idx[1:0], input flit_label_t label [1:0], input logic [DEST_ADDR_SIZE_X-1:0] x_dest [1:0], input logic [DEST_ADDR_SIZE_Y-1:0] y_dest [1:0],
+input logic [HEAD_PAYLOAD_SIZE-1:0] head_data [1:0], input logic [BODY_PAYLOAD_SIZE-1:0] body_data [1:0]);
+flit_t data_t [1:0];
+logic [VC_NUM-1:0] vc_flit_valid [1:0];
+begin
+    for (int i = 0; i < 2; i++) begin
+        data_t[i] = '0;
+        vc_flit_valid[i] = '0;
+        
+        if (label[i] == HEAD || label[i] == HEADTAIL) begin 
+            data_t[i] = {label[i], x_dest[i], y_dest[i], head_data[i]};
+        end 
+        else begin
+            data_t[i] = {label[i], body_data[i]};
+        end
+        if (vc_idx[i] == 1) begin
+            vc_flit_valid[i][1] = 1'b1;
+        end
+        else begin
+            vc_flit_valid[i][0] = 1'b1;
+        end
+    end
+
+    @(negedge clk);
+    for (int i = 0; i < 2; i++) begin
+        data[port[i]] = data_t[i];
+        valid_flit[port[i]] = vc_flit_valid[i];
+    end
+
+    @(posedge clk); #1; // Small delay to allow outputs to stabilize after clock edge
+    for (int i = 0; i < 2; i++) begin
+        if (label[i] == HEAD || label[i] == HEADTAIL) begin
+            $display("[%0t]-Flit received on (port,VC) (%s,%d) with label=%s, x_dest=%d, y_dest=%d, data=0x%h", $time, port[i].name(), vc_idx[i], label[i].name(), x_dest[i], y_dest[i], head_data[i]);
+        end
+        else begin
+            $display("[%0t]-Flit received on (port,VC) (%s,%d) with label=%s, data=0x%h", $time, port[i].name(), vc_idx[i], label[i].name(), data[port[i]]);
+        end
+        $display("Total flit: 0x%h", data[port[i]]); 
+        $display("------------------------------\n");  
+    end
+
+    @(negedge clk);
+    for (int i = 0; i < 2; i++) begin
+        valid_flit[port[i]] = 2'b00;
+    end
+end
+endtask
+
+task simultaneous_packets (input port_t current_port [1:0], input logic [VC_SIZE-1:0] vc_idx [1:0], input logic [DEST_ADDR_SIZE_X-1:0] x_dest [1:0], input logic [DEST_ADDR_SIZE_Y-1:0] y_dest [1:0]);
+begin
+    flit_label_t label [1:0];
+    logic [HEAD_PAYLOAD_SIZE-1:0] head_data [1:0];
+    logic [BODY_PAYLOAD_SIZE-1:0] body_data [1:0];
+    logic [DEST_ADDR_SIZE_X-1:0] x_dest_body [1:0];
+    logic [DEST_ADDR_SIZE_Y-1:0] y_dest_body [1:0];
+
+    for (int i = 0; i < 2; i++) begin
+        label[i] = HEAD;
+        head_data[i] = HEAD_PAYLOAD_SIZE'({$urandom, $urandom});
+        body_data[i] = '0; // No body data for head flit
+        x_dest_body[i] = '0;
+        y_dest_body[i] = '0;
+    end
+
+    simultaneous_receive_flit(current_port, vc_idx, label, x_dest, y_dest, head_data, body_data);
+
+    for (int i = 0; i < 2; i++) begin
+        wait(va_if.vc_request[current_port[i]][vc_idx[i]] == 1'b1);
+        $display("[%0t]-VA request for VC %d observed on %s port \n------------------------------\n", $time, vc_idx[i], current_port[i].name());
+    end
+    simultaneous_va(current_port, vc_idx);
+
+    for (int i = 0; i < 2; i++) begin
+        wait(sa_if.switch_request[current_port[i]][vc_idx[i]] == 1'b1);
+        $display("[%0t]-SA request for VC %d observed on %s port \n------------------------------\n", $time, vc_idx[i], current_port[i].name());
+    end
+    simultaneous_sa(current_port, vc_idx);
+
+    for (int i = 0; i < 2; i++) begin
+        label[i] = BODY;
+        head_data[i] = '0; // No head data for body flit
+        body_data[i] = BODY_PAYLOAD_SIZE'({$urandom, $urandom});
+        x_dest_body[i] = $urandom_range(0, MESH_SIZE_X-1);
+        y_dest_body[i] = $urandom_range(0, MESH_SIZE_Y-1);
+    end
+    repeat (2) begin
+        simultaneous_receive_flit(current_port, vc_idx, label, x_dest_body, y_dest_body, head_data, body_data);
+        simultaneous_sa(current_port, vc_idx);
+    end
+
+    for (int i = 0; i < 2; i++) begin
+        label[i] = TAIL;
+        head_data[i] = '0; // No head data for body flit
+        body_data[i] = BODY_PAYLOAD_SIZE'({$urandom, $urandom});
+        x_dest_body[i] = $urandom_range(0, MESH_SIZE_X-1);
+        y_dest_body[i] = $urandom_range(0, MESH_SIZE_Y-1);
+    end
+    simultaneous_receive_flit(current_port, vc_idx, label, x_dest_body, y_dest_body, head_data, body_data);
+    simultaneous_sa(current_port, vc_idx);
+
+    repeat (4) begin
+        @(negedge clk);
+        for (int i = 0; i < 2; i++) begin
+            credit_return_i[sa_if.out_port[current_port[i]][vc_idx[i]]][sa_if.downstream_vc[current_port[i]][vc_idx[i]]] = 1'b1; // Simulate credit return for the downstream VC after SA
+            $display("[%0t]-Credit return for downstream port %s and VC %d\n------------------------------\n", $time, sa_if.out_port[current_port[i]][vc_idx[i]].name(), sa_if.downstream_vc[current_port[i]][vc_idx[i]]);
+        end
+        @(negedge clk);
+        for (int i = 0; i < 2; i++) begin
+            credit_return_i[sa_if.out_port[current_port[i]][vc_idx[i]]][sa_if.downstream_vc[current_port[i]][vc_idx[i]]] = 1'b0; //Deassert credtit
+        end
+    end
+
+    repeat(2) @(posedge clk);
+end
+endtask
+
+
 initial begin
     reset_dut();
     
     headtail_flit_simulation(EAST, 1, 1, 1);
     packet_simulation(NORTH, 0, 2, 1);
     packet_credits_underflow_overflow(WEST, 1, 3, 3);
+    current_port[0] = SOUTH; current_port[1] = EAST;
+    vc_idx[0] = 0; vc_idx[1] = 1;
+    x_dest[0] = 3; y_dest[0] = 1;
+    x_dest[1] = 1; y_dest[1] = 0;
+    simultaneous_packets(current_port, vc_idx, x_dest, y_dest);
 
     $finish;
 end
