@@ -109,7 +109,7 @@ module vc_allocator (
             end
         end
 
-        eligible_vc_set_w = eligible_vc_set(ib_if.out_port_set, is_available_vc, ib_if.credits_exist, ib_if.vc_class);
+        eligible_vc_set_w = eligible_vc_set(ib_if.out_port_set, is_available_vc, ib_if.credits_exist);
 
         // ------------------------------------------------------------
         // Stage 1 Requests (Agent → Resource)
@@ -180,22 +180,21 @@ module vc_allocator (
     function automatic logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set (
         input logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] out_port_set,
         input logic [PORT_NUM-1:0][VC_NUM-1:0] is_available_vc_i,
-        input logic [PORT_NUM-1:0][VC_NUM-1:0] credits,
-        input vc_class_t [PORT_NUM-1:0][VC_NUM-1:0] vc_class //Escape or Adaptive enum
+        input logic [PORT_NUM-1:0][VC_NUM-1:0] credits
         );
 
         logic class_valid;
-        logic is_escape_up;
+        logic is_escape_up;        
         
         eligible_vc_set = '0;
 
         foreach (out_port_set[up_port]) begin
              foreach (out_port_set[up_port][up_vc]) begin
-                is_escape_up = (vc_class[up_port][up_vc] == ESCAPE); 
+                is_escape_up = (up_vc == ESCAPE); // Assuming VC 0 is Escape, others are Adaptive
                 foreach (out_port_set[up_port][up_vc][down_port]) begin
                     if (out_port_set[up_port][up_vc][down_port]) begin
                         for (int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1) begin
-                            class_valid = !(is_escape_up && vc_class[down_port][down_vc] == ADAPTIVE);
+                            class_valid = !(is_escape_up && down_vc != ESCAPE); // Escape upstream VC can only allocate Escape downstream VC (VC 0)
                             if (is_available_vc_i[down_port][down_vc] && credits[down_port][down_vc] && class_valid) begin
                                 eligible_vc_set[up_port][up_vc][down_port][down_vc] = 1'b1;
                             end

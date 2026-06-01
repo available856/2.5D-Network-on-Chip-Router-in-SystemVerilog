@@ -15,14 +15,11 @@ module input_block #(
     input_block2vc_allocator.input_block va_if,
     output logic [VC_NUM-1:0] vc_allocatable_o [PORT_NUM-1:0],
     output logic [VC_NUM-1:0] error_o [PORT_NUM-1:0],
-    output vc_class_t [PORT_NUM-1:0][VC_NUM-1:0] vc_class_o,
     output credits_t credit_return_o [PORT_NUM-1:0]
 );
     
     logic [VC_NUM-1:0] is_full [PORT_NUM-1:0];
     logic [VC_NUM-1:0] is_empty [PORT_NUM-1:0];
-
-    port_t [VC_NUM-1:0] out_port [PORT_NUM-1:0];
 
     logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_counter;
     logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_counter_next ;
@@ -30,7 +27,6 @@ module input_block #(
     logic [PORT_NUM-1:0][VC_NUM-1:0] flit_consumed; // Indicates if a flit has been consumed from the output port and VC
     
 
-    assign sa_if.out_port = out_port;
     assign va_if.credits_exist = credits_exist;
     assign sa_if.credits_exist = credits_exist;
 
@@ -80,11 +76,10 @@ module input_block #(
                 .sa_request_o(sa_if.switch_request[ip]),
                 .sa_downstream_vc_o(sa_if.downstream_vc[ip]),
                 .out_port_set_o(va_if.out_port_set[ip]),
-                .out_port_o(out_port[ip]),
+                .out_port_o(sa_if.out_port[ip]),
                 .is_full_o(is_full[ip]),
                 .is_empty_o(is_empty[ip]),
-                .error_o(error_o[ip]),
-                .vc_class_o(vc_class_o[ip])
+                .error_o(error_o[ip])
             );
         end
     endgenerate

@@ -24,8 +24,7 @@ module input_port #(
     output credits_t credit_return_o,
     output logic [VC_NUM-1:0] is_full_o,
     output logic [VC_NUM-1:0] is_empty_o,
-    output logic [VC_NUM-1:0] error_o,
-    output vc_class_t [VC_NUM-1:0] vc_class_o
+    output logic [VC_NUM-1:0] error_o
 );
 
     flit_t [VC_NUM-1:0] data_out;
@@ -77,8 +76,7 @@ module input_port #(
                 .switch_request_o(sa_request_o[vc]),
                 .vc_allocatable_o(is_allocatable_vc_o[vc]),
                 .downstream_vc_o(sa_downstream_vc_o[vc]),
-                .error_o(error_o[vc]),
-                .vc_class_o(vc_class_o[vc])
+                .error_o(error_o[vc])
             );
         end
     endgenerate
@@ -91,7 +89,7 @@ module input_port #(
             ) rc_unit (
                 .x_dest_i(x_dest[vc]),
                 .y_dest_i(y_dest[vc]),
-                .vc_class_i(vc_class_o[vc]),
+                .vc_class_i(vc),
                 .rc_valid_i(rc_valid[vc]),
                 .eligible_port_set(out_port_set_o[vc])
             );
