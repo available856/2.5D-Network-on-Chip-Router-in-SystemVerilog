@@ -38,6 +38,8 @@ module tb_vc_buffer;
     logic [VC_SIZE-1:0] downstream_vc_o;
     logic error_o;
 
+    vc_class_t vc_class_o;
+
     flit_t expected_q[$];
     int error_count = 0;
 
@@ -45,7 +47,8 @@ module tb_vc_buffer;
     // DUT
     // ------------------------------------------------------------
     vc_buffer #(
-        .BUFFER_SIZE(BUFFER_SIZE)
+        .BUFFER_SIZE(BUFFER_SIZE),
+        .VC_ID(0) // Set VC_ID to 0 for ESCAPE class
     ) dut (.*);
 
     // ------------------------------------------------------------
@@ -62,44 +65,58 @@ module tb_vc_buffer;
 
     task reset_dut();
         begin
+            @(negedge clk);
             rst = 1;
             write_i = 0;
             read_i = 0;
             vc_valid_i = 0;
             data_i = '0;
-            #(CLK_PERIOD*2);
+            out_port_i = LOCAL;
+            @(negedge clk);
             rst = 0;
-            #(CLK_PERIOD*2);
+            @(negedge clk);
         end
     endtask
 
 
-    task send_flit(input flit_label_t label, input logic [BODY_PAYLOAD_SIZE-1:0] data);
+    task send_flit(input flit_label_t label, input logic [BODY_PAYLOAD_SIZE-1:0] data, input logic [VC_SIZE-1:0] vc_id,
+        input port_t out_port);
+        out_port_i = LOCAL; // Default to LOCAL for non-HEAD flits
         begin
             wait(!is_full_o);
-            @(posedge clk);
+            @(negedge clk);
             write_i = 1;
-            data_i = flit_t'({label, data});
+            data_i = flit_t'({label, vc_id, data});
 
-            if (data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)
-                out_port_i = NORTH;
+            if (label == HEAD || label == HEADTAIL)
+                out_port_i <= out_port; // Set output port for the packet
 
             expected_q.push_back(data_i);
             $display("Data pushed to queue. -- [%0t]", $time);
 
-            @(posedge clk);
+            @(negedge clk);
             write_i = 0;
         end
     endtask
 
+    task    validate_port (input port_t expected_port);
+        begin
+            if (out_port_o !== expected_port) begin
+                $display("[FAIL] Output port mismatch! Expected: %0d, Got: %0d -- [%0t]", expected_port, out_port_o, $time);
+                error_count++;
+            end 
+            else
+                $display("[PASS] Correct output port %0d -- [%0t]", expected_port, $time);
+        end
+    endtask
 
     task grant_vc(input logic [VC_SIZE-1:0] id);
         begin
             wait(vc_request_o);
-            @(posedge clk);
+            @(negedge clk);
             vc_valid_i = 1;
             vc_new_i = id;
-            @(posedge clk);
+            @(negedge clk);
             vc_valid_i = 0;
         end
     endtask
@@ -110,10 +127,10 @@ module tb_vc_buffer;
         begin
             for (int i = 0; i < count; i++) begin
                 wait(switch_request_o);
-                @(posedge clk);
-                read_i = 1;
-                @(posedge clk);
-                read_i = 0;
+                @(negedge clk);
+                read_i <= 1;
+                @(negedge clk);
+                read_i <= 0;
 
             if (expected_q.size() == 0) begin
                 $display("[FAIL] Queue empty but DUT produced data!--[%0t]", $time);
@@ -122,12 +139,13 @@ module tb_vc_buffer;
 
             else begin
                 expected_flit = expected_q.pop_front();
+                expected_flit.vc_id = dut.downstream_vc_o;
                 $display("Data extracted from queue. -- [%0t]", $time);
                 if (data_o !== expected_flit) begin
                     $display("[FAIL] Data mismatch! Expected: %h, Got: %h --[%0t]", expected_flit, data_o, $time);
                     error_count++;
-            end
-            end
+                    end
+                end
             end
         end
     endtask
@@ -144,14 +162,15 @@ module tb_vc_buffer;
         // --------------------------------------------------------
         $display("Scenario 1: Standard packet-[%0t]", $time);
 
-        send_flit(HEAD, {62{$random}});
-        grant_vc(2);
-        send_flit(BODY, {62{$random}});
-        send_flit(TAIL, {62{$random}});
+        send_flit(HEAD, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), NORTH); // Set output port for the packet
+        grant_vc(0);
+        validate_port(NORTH);
+        send_flit(BODY, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), NORTH);
+        send_flit(TAIL, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), NORTH);
 
         consume_flits(3);
 
-        wait (vc_allocatable_o)
+        wait(vc_allocatable_o);
             $display("[PASS] Standard packet released VC-[%0t]", $time);
 
         #(CLK_PERIOD*3);
@@ -161,11 +180,12 @@ module tb_vc_buffer;
         // --------------------------------------------------------
         $display("Scenario 2: HEADTAIL-[%0t]", $time);
 
-        send_flit(HEADTAIL, {62{$random}});
+        send_flit(HEADTAIL, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), EAST); // Set output port for the packet    
         grant_vc(1);
+        validate_port(EAST);
         consume_flits(1);
 
-        wait (vc_allocatable_o)
+        wait(vc_allocatable_o);
             $display("[PASS] HEADTAIL released VC-[%0t]", $time);
 
         #(CLK_PERIOD*3);
@@ -175,12 +195,13 @@ module tb_vc_buffer;
         // --------------------------------------------------------
         $display("Scenario 3: Illegal interleaving-[%0t]", $time);
 
-        send_flit(HEAD, {62{$random}});
-        grant_vc(3);
+        send_flit(HEAD, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), SOUTH); // Set output port for the packet
+        grant_vc(0);
+        validate_port(SOUTH);
 
         wait(switch_request_o);
 
-        send_flit(HEAD, {62{$random}}); // Illegal HEAD while first packet is active
+        send_flit(HEAD, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), SOUTH); // Illegal HEAD while first packet is active
 
        wait(error_o);
             $display("[PASS] Illegal HEAD correctly flagged-[%0t]", $time);
