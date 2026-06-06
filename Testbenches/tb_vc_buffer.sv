@@ -89,7 +89,7 @@ module tb_vc_buffer;
             data_i = flit_t'({label, vc_id, data});
 
             if (label == HEAD || label == HEADTAIL)
-                out_port_i <= out_port; // Set output port for the packet
+                out_port_i = out_port; // Set output port for the packet
 
             expected_q.push_back(data_i);
             $display("Data pushed to queue. -- [%0t]", $time);
@@ -106,7 +106,7 @@ module tb_vc_buffer;
                 error_count++;
             end 
             else
-                $display("[PASS] Correct output port %0d -- [%0t]", expected_port, $time);
+                $display("[PASS] Correct output port %0d -- [%0t]", expected_port.name(), $time);
         end
     endtask
 
@@ -128,9 +128,9 @@ module tb_vc_buffer;
             for (int i = 0; i < count; i++) begin
                 wait(switch_request_o);
                 @(negedge clk);
-                read_i <= 1;
+                read_i = 1;
                 @(negedge clk);
-                read_i <= 0;
+                read_i = 0;
 
             if (expected_q.size() == 0) begin
                 $display("[FAIL] Queue empty but DUT produced data!--[%0t]", $time);
