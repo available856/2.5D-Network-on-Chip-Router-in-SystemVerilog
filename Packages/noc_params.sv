@@ -33,17 +33,17 @@ package noc_params;
     // Header overhead = Label (2) + X (2) + Y (2) = 6 bits
     localparam HEADER_SIZE = DEST_ADDR_SIZE_X + DEST_ADDR_SIZE_Y + $bits(flit_label_t);
 
-    // Head Payload = 64 - 6 = 58 bits
-    localparam HEAD_PAYLOAD_SIZE = FLIT_WIDTH - HEADER_SIZE;
+    // Head Payload = 64 - 6 - 1 = 57 bits
+    localparam HEAD_PAYLOAD_SIZE = FLIT_WIDTH - HEADER_SIZE - $bits(VC_SIZE);
     
-    // Body Payload = 64 - 2 = 62 bits
-    localparam BODY_PAYLOAD_SIZE = FLIT_WIDTH - $bits(flit_label_t);
+    // Body Payload = 64 - 2 - 1 = 61 bits
+    localparam BODY_PAYLOAD_SIZE = FLIT_WIDTH - $bits(flit_label_t) - $bits(VC_SIZE);
 
     // ------------------------------------------------------------------------
     // 4. Packet Structures
     // ------------------------------------------------------------------------
     
-    // The "View" inside a Head Flit (Total 62 bits)
+    // The "View" inside a Head Flit (Total 61 bits)
     typedef struct packed {
         logic [DEST_ADDR_SIZE_X-1 : 0] x_dest;
         logic [DEST_ADDR_SIZE_Y-1 : 0] y_dest;
@@ -54,13 +54,19 @@ package noc_params;
     // We renamed 'flit_novc_t' to 'flit_t'
     typedef struct packed {
         flit_label_t flit_label; // [63:62]
+        logic [VC_SIZE-1:0] vc_id; // [61]
         union packed {
-            head_data_t                     head_data; // [61:0] if Head
-            logic [BODY_PAYLOAD_SIZE-1 : 0] bt_pl;     // [61:0] if Body
+            head_data_t                     head_data; // [60:0] if Head
+            logic [BODY_PAYLOAD_SIZE-1 : 0] bt_pl;     // [60:0] if Body
         } data;
     } flit_t;
 
     //2-bit vector - Parallel credits
-    typedef logic [VC_NUM-1:0] credits_t;                          
+    typedef logic [VC_NUM-1:0] credits_t;
+
+    typedef struct packed {
+        flit_t flit_pb;
+        credits_t credits_pb;
+    } flit_pb_t;  //Piggybacked flit with credits - 66 bits                  
 
 endpackage
