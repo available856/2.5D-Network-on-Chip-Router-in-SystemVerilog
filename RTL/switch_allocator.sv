@@ -1,7 +1,6 @@
 import noc_params::*;
 
-module switch_allocator #(
-)(
+module switch_allocator(
     input rst,
     input clk,
     input_block2switch_allocator.switch_allocator ib_if,
@@ -21,6 +20,9 @@ module switch_allocator #(
         .grant_o(grant)
     );
 
+
+    assign xbar_if.valid_flit = valid_flit_o;
+
     /*
     Combinational logic:
     - compute the request matrix for the internal Separable Input-First
@@ -35,10 +37,10 @@ module switch_allocator #(
     begin
         for(int port = 0; port < PORT_NUM ; port = port + 1)
         begin
-            ib_if.valid_sel[port] = 1'b0;
+            ib_if.valid_port_sel[port] = 1'b0;
             valid_flit_o[port] = 1'b0;
             ib_if.vc_sel[port] = {VC_SIZE{1'b0}};
-            xbar_if.input_vc_sel[port] = {PORT_SIZE{1'b0}};
+            xbar_if.input_port_sel[port] = {PORT_SIZE{1'b0}};
             request_cmd[port]={VC_NUM{1'b0}};
         end
 
@@ -59,10 +61,10 @@ module switch_allocator #(
             begin
                 if(grant[up_port][up_vc])
                 begin
-                    ib_if.vc_sel[up_port] = up_vc;
-                    ib_if.valid_sel[up_port] = 1'b1;
+                    ib_if.vc_sel[up_port] = VC_SIZE'(up_vc);
+                    ib_if.valid_port_sel[up_port] = 1'b1;
                     valid_flit_o[ib_if.out_port[up_port][up_vc]] = 1'b1;
-                    xbar_if.input_vc_sel[ib_if.out_port[up_port][up_vc]] = up_port;
+                    xbar_if.input_port_sel[ib_if.out_port[up_port][up_vc]] = PORT_SIZE'(up_port);
                 end
             end
         end
