@@ -21,8 +21,7 @@ module vc_buffer #(
     output logic switch_request_o,
     output logic vc_allocatable_o,
     output logic [VC_SIZE-1:0] downstream_vc_o,
-    output logic error_o,
-    output vc_class_t vc_class_o
+    output logic error_o
 );
 
 enum logic [1:0] {IDLE, RC, VA, SA} ss, ss_next;
@@ -34,11 +33,11 @@ logic vc_allocatable_next;
 logic error_next;
 port_t out_port_next;
 
-assign vc_class_o = (VC_ID == 0) ? ESCAPE : ADAPTIVE;
+
+flit_t peek_o_raw;
+flit_t data_o_raw;
 
 
-//flit_t peek_flit;
-//flit_t read_flit;
 
 /*
  VC Input Buffer (vc_buffer)
@@ -66,8 +65,8 @@ circular_buffer (
     .write_i(write_cmd),
     .rst(rst),
     .clk(clk),
-    .data_o(data_o),
-    .peek_o(peek_o),
+    .data_o(data_o_raw),
+    .peek_o(peek_o_raw),
     .is_full(is_full_o),
     .is_empty(is_empty_o)
 );
@@ -140,117 +139,121 @@ assign read_cmd = read_i && !is_empty_o;
 
 always_comb
 begin
-    ss_next = ss;
-    out_port_next = out_port_o;
-    downstream_vc_next = downstream_vc_o;
+  peek_o = peek_o_raw; // 1. Pass the full raw flit to the output port
+  data_o = data_o_raw; 
 
-    //read_cmd = 0;
-    //write_cmd = 0;
+  peek_o.vc_id = downstream_vc_o; // 2. Overwrite the VC ID directly
+  data_o.vc_id = downstream_vc_o; 
+  
 
-    end_packet_next = end_packet;
-    error_next = 0;
+  ss_next = ss;
+  out_port_next = out_port_o;
+  downstream_vc_next = downstream_vc_o;
 
-    vc_request_o = 0;
-    switch_request_o = 0;
-    vc_allocatable_next = 0;
+  end_packet_next = end_packet;
+  error_next = 0;
 
-    unique case(ss)
-        IDLE:
-        begin
-          if (!is_empty_o)
-            begin
-              ss_next = RC;
-            end
-            
-          if (vc_valid_i || read_cmd)
-            begin
-              error_next = 1;
-              ss_next = ss;
-            end
+  vc_request_o = 0;
+  switch_request_o = 0;
+  vc_allocatable_next = 0;
 
-          if (write_cmd && data_i.flit_label == HEADTAIL)
-            begin
-              end_packet_next = 1;
-            end
-        end
-
-        /*
-        The vc_buffer assumes that the upstream logic only presents 
-        a HEAD or HEADTAIL flit as the first flit of a packet.
-        Any violation is detected in RC and flagged as error.
-        */
-        RC: 
-        begin
-          if (!is_empty_o && (peek_o.flit_label == HEAD || peek_o.flit_label == HEADTAIL))
-            begin
-              ss_next = VA;
-            end
-        
-          if (vc_valid_i || read_cmd || (!is_empty_o && (peek_o.flit_label == BODY || peek_o.flit_label == TAIL)))
-            begin
-              error_next = 1;
-              ss_next = ss;
-            end
-        end
-        
-        VA:
-        begin
-            if(vc_valid_i)
-            begin
-                ss_next = SA;
-                downstream_vc_next = vc_new_i;
-                out_port_next = out_port_i;
-            end
-
-            vc_request_o = 1;
-
-            if((write_cmd && (end_packet || data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)) || read_cmd)
-            begin
-                error_next = 1;
-                ss_next = ss;
-            end
-
-            if(write_cmd && data_i.flit_label == TAIL)
-            begin
-                end_packet_next = 1;
-            end
-        end
-
-        SA:
-        begin
-            if(read_cmd && (peek_o.flit_label == TAIL || peek_o.flit_label == HEADTAIL))
-            begin
-                ss_next = IDLE;
-                vc_allocatable_next = 1;
-                end_packet_next = 0;
-            end
-
-            if(!is_empty_o)
-            begin
-                switch_request_o = 1;
-            end
-
-            if(vc_valid_i || (write_cmd && (end_packet || data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)))
-            begin
-                error_next = 1;
-                ss_next = ss;
-            end
-
-            if(write_cmd && data_i.flit_label == TAIL)
-            begin
-                end_packet_next = 1;
-            end
-        end
-
-        default:
-        begin
-            ss_next = IDLE;
-            vc_allocatable_next = 1;
+  unique case(ss)
+      IDLE:
+      begin
+        if (!is_empty_o)
+          begin
+            ss_next = RC;
+          end
+          
+        if (vc_valid_i || read_cmd)
+          begin
             error_next = 1;
-            end_packet_next = 0;
-        end
+            ss_next = ss;
+          end
 
-    endcase
+        if (write_cmd && data_i.flit_label == HEADTAIL)
+          begin
+            end_packet_next = 1;
+          end
+      end
+
+      /*
+      The vc_buffer assumes that the upstream logic only presents 
+      a HEAD or HEADTAIL flit as the first flit of a packet.
+      Any violation is detected in RC and flagged as error.
+      */
+      RC: 
+      begin
+        if (!is_empty_o && (peek_o.flit_label == HEAD || peek_o.flit_label == HEADTAIL))
+          begin
+            ss_next = VA;
+          end
+      
+        if (vc_valid_i || read_cmd || (!is_empty_o && (peek_o.flit_label == BODY || peek_o.flit_label == TAIL)))
+          begin
+            error_next = 1;
+            ss_next = ss;
+          end
+      end
+      
+      VA:
+      begin
+          if(vc_valid_i)
+          begin
+              ss_next = SA;
+              downstream_vc_next = vc_new_i;
+              out_port_next = out_port_i;
+          end
+
+          vc_request_o = 1;
+
+          if((write_cmd && (end_packet || data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)) || read_cmd)
+          begin
+              error_next = 1;
+              ss_next = ss;
+          end
+
+          if(write_cmd && data_i.flit_label == TAIL)
+          begin
+              end_packet_next = 1;
+          end
+      end
+
+      SA:
+      begin
+          if(read_cmd && (peek_o.flit_label == TAIL || peek_o.flit_label == HEADTAIL))
+          begin
+              ss_next = IDLE;
+              vc_allocatable_next = 1;
+              end_packet_next = 0;
+          end
+
+          if(!is_empty_o)
+          begin
+              switch_request_o = 1;
+          end
+
+          if(vc_valid_i || (write_cmd && (end_packet || data_i.flit_label == HEAD || data_i.flit_label == HEADTAIL)))
+          begin
+              error_next = 1;
+              ss_next = ss;
+          end
+
+          if(write_cmd && data_i.flit_label == TAIL)
+          begin
+              end_packet_next = 1;
+          end
+      end
+
+      default:
+      begin
+          ss_next = IDLE;
+          vc_allocatable_next = 1;
+          error_next = 1;
+          end_packet_next = 0;
+      end
+
+  endcase
 end
 
 endmodule

@@ -6,7 +6,7 @@ module input_port #(
     parameter Y_CURRENT = MESH_SIZE_Y/2
 )(
     input flit_t data_i,
-    input [VC_NUM-1:0] valid_flit_i,
+    input valid_flit_i,
     input port_t [VC_NUM-1:0] port_new_i,
     input rst,
     input clk,
@@ -117,8 +117,11 @@ module input_port #(
                 rc_valid[vc] = 1'b1;
             end
         end
-        
-        write_cmd = valid_flit_i; // One-hot vector indicating which VC has a valid flit to write
+
+        write_cmd = {VC_NUM{1'b0}};
+        if (valid_flit_i) begin
+            write_cmd[data_i.vc_id] = 1;
+        end
 
         read_cmd = {VC_NUM{1'b0}};
         if(sa_valid_i && !is_empty_o[sa_sel_vc_i]) begin

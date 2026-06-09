@@ -22,15 +22,15 @@ module router #(
 
     //connections from upstream
     flit_t data_out [PORT_NUM-1:0];
-    logic is_valid_out [PORT_NUM-1:0];
+    logic [PORT_NUM-1:0] is_valid_out;
     credits_t credits_in [PORT_NUM-1:0];
-    logic [VC_NUM-1:0] is_allocatable_in [PORT_NUM-1:0];
+    logic [PORT_NUM-1:0][VC_NUM-1:0] is_allocatable_in;
 
     //connections from downstream
     flit_t data_in [PORT_NUM-1:0];
-    logic  is_valid_in [PORT_NUM-1:0];
+    logic is_valid_in [PORT_NUM-1:0];
     credits_t credits_out [PORT_NUM-1:0];
-    logic  [VC_NUM-1:0] is_allocatable_out [PORT_NUM-1:0];
+    logic [VC_NUM-1:0] is_allocatable_out [PORT_NUM-1:0];
 
     always_comb
     begin
@@ -81,7 +81,7 @@ module router #(
         router_if_south_down.is_allocatable = is_allocatable_out[SOUTH];
         router_if_west_down.is_allocatable  = is_allocatable_out[WEST];
         router_if_east_down.is_allocatable  = is_allocatable_out[EAST];
-
+        
     end
 
     input_block2crossbar ib2xbar_if();

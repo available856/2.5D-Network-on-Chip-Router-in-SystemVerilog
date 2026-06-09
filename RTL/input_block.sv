@@ -6,7 +6,7 @@ module input_block #(
     parameter Y_CURRENT = MESH_SIZE_Y/2
 )(
     input flit_t data_i [PORT_NUM-1:0],
-    input [VC_NUM-1:0] valid_flit_i [PORT_NUM-1:0],
+    input valid_flit_i [PORT_NUM-1:0],
     input credits_t credit_return_i [PORT_NUM-1:0],
     input rst,
     input clk,
