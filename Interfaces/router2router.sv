@@ -6,7 +6,6 @@ interface router2router;
     logic is_valid;
     credits_t credits;
     logic [VC_NUM-1:0] is_allocatable;
-    vc_class_t vc_class;
 
     modport upstream (
         output data,
