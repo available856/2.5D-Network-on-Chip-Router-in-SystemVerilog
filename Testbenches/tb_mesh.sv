@@ -62,7 +62,7 @@ always @(posedge clk) begin
                 $display("Valid: %b, X: %0d, Y: %0d", is_valid_o[col][row], col, row);
             if (credits_o[col][row] != '0)
                 $display("Credits: %b, X: %0d, Y: %0d", credits_o[col][row], col, row);
-            if (is_allocatable_o[col][row])
+            if (is_allocatable_o[col][row] != 0)
                 $display("Allocatable %b, X: %0d, Y: %0d", is_allocatable_o[col][row], col, row);
         end
     end
@@ -75,7 +75,7 @@ always @(posedge clk) begin
                 $display("Valid: %b, X: %0d, Y: %0d", is_valid_i[col][row], col, row);
             if (credits_i[col][row] != '0)
                 $display("Credits: %b, X: %0d, Y: %0d", credits_i[col][row], col, row);
-            if (is_allocatable_i[col][row])
+            if (is_allocatable_i[col][row] != 0)
                 $display("Allocatable %b, X: %0d, Y: %0d", is_allocatable_i[col][row], col, row);
         end
     end
