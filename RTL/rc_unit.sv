@@ -30,6 +30,10 @@ module rc_unit #(
     - the output port encoding is as follows:
             LOCAL = 0, NORTH = 1, SOUTH = 2, WEST = 3, EAST = 4
     */
+
+    /* verilator lint_off UNSIGNED */
+    /* verilator lint_off CMPCONST */
+
     always_comb
     begin
         eligible_port_set = '0; // Default: no eligible ports
@@ -74,6 +78,9 @@ module rc_unit #(
         end
 
     end
+
+    /* verilator lint_on CMPCONST */
+    /* verilator lint_on UNSIGNED */
         
 
 endmodule
