@@ -89,7 +89,7 @@ module input_port #(
             ) rc_unit (
                 .x_dest_i(x_dest[vc]),
                 .y_dest_i(y_dest[vc]),
-                .vc_class_i(vc),
+                .vc_class_i(vc_class_t'(vc)),
                 .rc_valid_i(rc_valid[vc]),
                 .eligible_port_set(out_port_set_o[vc])
             );
