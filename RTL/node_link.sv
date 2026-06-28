@@ -15,16 +15,14 @@ module node_link (
     input [VC_NUM-1:0] is_allocatable_i
 );
 
-    always_comb
-    begin
-        router_if_up.data = data_i;
-        router_if_up.is_valid = is_valid_i;
-        credits_o = router_if_up.credits;
-        is_allocatable_o = router_if_up.is_allocatable;
-        data_o = router_if_down.data;
-        is_valid_o = router_if_down.is_valid;
-        router_if_down.credits = credits_i;
-        router_if_down.is_allocatable = is_allocatable_i;
-    end
+    assign router_if_up.data = data_i;
+    assign router_if_up.is_valid = is_valid_i;
+    assign credits_o = router_if_up.credits;
+    assign is_allocatable_o = router_if_up.is_allocatable;
+    assign data_o = router_if_down.data;
+    assign is_valid_o = router_if_down.is_valid;
+    assign router_if_down.credits = credits_i;
+    assign router_if_down.is_allocatable = is_allocatable_i;
+    
 
 endmodule

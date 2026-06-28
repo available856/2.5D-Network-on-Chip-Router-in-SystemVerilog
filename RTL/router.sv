@@ -32,57 +32,53 @@ module router #(
     credits_t credits_out [PORT_NUM-1:0];
     logic [VC_NUM-1:0] is_allocatable_out [PORT_NUM-1:0];
 
-    always_comb
-    begin
-        router_if_local_up.data = data_out[LOCAL];
-        router_if_north_up.data = data_out[NORTH];
-        router_if_south_up.data = data_out[SOUTH];
-        router_if_west_up.data  = data_out[WEST];
-        router_if_east_up.data  = data_out[EAST];
+    assign router_if_local_up.data = data_out[LOCAL];
+    assign router_if_north_up.data = data_out[NORTH];
+    assign router_if_south_up.data = data_out[SOUTH];
+    assign router_if_west_up.data  = data_out[WEST];
+    assign router_if_east_up.data  = data_out[EAST];
 
-        router_if_local_up.is_valid = is_valid_out[LOCAL];
-        router_if_north_up.is_valid = is_valid_out[NORTH];
-        router_if_south_up.is_valid = is_valid_out[SOUTH];
-        router_if_west_up.is_valid  = is_valid_out[WEST];
-        router_if_east_up.is_valid  = is_valid_out[EAST];
+    assign router_if_local_up.is_valid = is_valid_out[LOCAL];
+    assign router_if_north_up.is_valid = is_valid_out[NORTH];
+    assign router_if_south_up.is_valid = is_valid_out[SOUTH];
+    assign router_if_west_up.is_valid  = is_valid_out[WEST];
+    assign router_if_east_up.is_valid  = is_valid_out[EAST];
 
-        credits_in[LOCAL] = router_if_local_up.credits;
-        credits_in[NORTH] = router_if_north_up.credits;
-        credits_in[SOUTH] = router_if_south_up.credits;
-        credits_in[WEST]  = router_if_west_up.credits;
-        credits_in[EAST]  = router_if_east_up.credits;
+    assign credits_in[LOCAL] = router_if_local_up.credits;
+    assign credits_in[NORTH] = router_if_north_up.credits;
+    assign credits_in[SOUTH] = router_if_south_up.credits;
+    assign credits_in[WEST]  = router_if_west_up.credits;
+    assign credits_in[EAST]  = router_if_east_up.credits;
 
-        is_allocatable_in[LOCAL] = router_if_local_up.is_allocatable;
-        is_allocatable_in[NORTH] = router_if_north_up.is_allocatable;
-        is_allocatable_in[SOUTH] = router_if_south_up.is_allocatable;
-        is_allocatable_in[WEST]  = router_if_west_up.is_allocatable;
-        is_allocatable_in[EAST]  = router_if_east_up.is_allocatable;
+    assign is_allocatable_in[LOCAL] = router_if_local_up.is_allocatable;
+    assign is_allocatable_in[NORTH] = router_if_north_up.is_allocatable;
+    assign is_allocatable_in[SOUTH] = router_if_south_up.is_allocatable;
+    assign is_allocatable_in[WEST]  = router_if_west_up.is_allocatable;
+    assign is_allocatable_in[EAST]  = router_if_east_up.is_allocatable;
 
-        data_in[LOCAL] = router_if_local_down.data;
-        data_in[NORTH] = router_if_north_down.data;
-        data_in[SOUTH] = router_if_south_down.data;
-        data_in[WEST]  = router_if_west_down.data;
-        data_in[EAST]  = router_if_east_down.data;
+    assign data_in[LOCAL] = router_if_local_down.data;
+    assign data_in[NORTH] = router_if_north_down.data;
+    assign data_in[SOUTH] = router_if_south_down.data;
+    assign data_in[WEST]  = router_if_west_down.data;
+    assign data_in[EAST]  = router_if_east_down.data;
 
-        is_valid_in[LOCAL] = router_if_local_down.is_valid;
-        is_valid_in[NORTH] = router_if_north_down.is_valid;
-        is_valid_in[SOUTH] = router_if_south_down.is_valid;
-        is_valid_in[WEST]  = router_if_west_down.is_valid;
-        is_valid_in[EAST]  = router_if_east_down.is_valid;
+    assign is_valid_in[LOCAL] = router_if_local_down.is_valid;
+    assign is_valid_in[NORTH] = router_if_north_down.is_valid;
+    assign is_valid_in[SOUTH] = router_if_south_down.is_valid;
+    assign is_valid_in[WEST]  = router_if_west_down.is_valid;
+    assign  is_valid_in[EAST]  = router_if_east_down.is_valid;
 
-        router_if_local_down.credits = credits_out[LOCAL];
-        router_if_north_down.credits = credits_out[NORTH];
-        router_if_south_down.credits = credits_out[SOUTH];
-        router_if_west_down.credits  = credits_out[WEST];
-        router_if_east_down.credits  = credits_out[EAST];
+    assign router_if_local_down.credits = credits_out[LOCAL];
+    assign router_if_north_down.credits = credits_out[NORTH];
+    assign router_if_south_down.credits = credits_out[SOUTH];
+    assign router_if_west_down.credits  = credits_out[WEST];
+    assign router_if_east_down.credits  = credits_out[EAST];
 
-        router_if_local_down.is_allocatable = is_allocatable_out[LOCAL];
-        router_if_north_down.is_allocatable = is_allocatable_out[NORTH];
-        router_if_south_down.is_allocatable = is_allocatable_out[SOUTH];
-        router_if_west_down.is_allocatable  = is_allocatable_out[WEST];
-        router_if_east_down.is_allocatable  = is_allocatable_out[EAST];
-        
-    end
+    assign router_if_local_down.is_allocatable = is_allocatable_out[LOCAL];
+    assign router_if_north_down.is_allocatable = is_allocatable_out[NORTH];
+    assign router_if_south_down.is_allocatable = is_allocatable_out[SOUTH];
+    assign router_if_west_down.is_allocatable  = is_allocatable_out[WEST];
+    assign router_if_east_down.is_allocatable  = is_allocatable_out[EAST];
 
     input_block2crossbar ib2xbar_if();
     input_block2switch_allocator ib2sa_if();

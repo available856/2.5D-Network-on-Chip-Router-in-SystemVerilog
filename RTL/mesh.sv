@@ -42,7 +42,7 @@ module mesh (
                 localparam int IDX_V_CURR = (col * (MESH_SIZE_Y + 1)) + row;
                 localparam int IDX_V_NEXT = (col * (MESH_SIZE_Y + 1)) + (row + 1);
 
-                // Local Link Declarations
+                // Local Link Instantiations
                 router2router local_up_link();
                 router2router local_down_link();
                 router2router north_up_link();
@@ -64,28 +64,28 @@ module mesh (
                     .clk(clk),
                     .rst(rst),       
                      
-                    .router_if_local_up  (local_up_link.upstream),
-                    .router_if_local_down(local_down_link.downstream),
+                    .router_if_local_up  (local_up_link),
+                    .router_if_local_down(local_down_link),
 
-                    .router_if_north_up  (north_up_link.upstream),
-                    .router_if_north_down(north_down_link.downstream),
+                    .router_if_north_up  (north_up_link),
+                    .router_if_north_down(north_down_link),
 
-                    .router_if_south_up  (south_up_link.upstream),
-                    .router_if_south_down(south_down_link.downstream),
+                    .router_if_south_up  (south_up_link),
+                    .router_if_south_down(south_down_link),
                     
-                    .router_if_west_up   (west_up_link.upstream),
-                    .router_if_west_down (west_down_link.downstream),
+                    .router_if_west_up   (west_up_link),
+                    .router_if_west_down (west_down_link),
 
-                    .router_if_east_up   (east_up_link.upstream),
-                    .router_if_east_down (east_down_link.downstream),
+                    .router_if_east_up   (east_up_link),
+                    .router_if_east_down (east_down_link),
                     
                     .error_o(error_o[col][row])
                 );
 
                 // Node Link Instantiation
                 node_link node_link_inst (
-                    .router_if_down  (local_up_link.downstream),
-                    .router_if_up    (local_down_link.upstream),
+                    .router_if_down  (local_up_link),
+                    .router_if_up    (local_down_link),
                     
                     .data_i          (data_i[col][row]),
                     .is_valid_i      (is_valid_i[col][row]),
