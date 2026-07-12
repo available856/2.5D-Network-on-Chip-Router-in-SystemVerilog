@@ -12,7 +12,7 @@ module vc_buffer #(
     input port_t out_port_i,
     input rst,
     input clk,
-    output flit_t data_o,
+    //output flit_t data_o,
     output flit_t peek_o,
     output logic is_full_o,
     output logic is_empty_o,
@@ -35,7 +35,7 @@ port_t out_port_next;
 
 
 flit_t peek_o_raw;
-flit_t data_o_raw;
+//flit_t data_o_raw;
 
 
 
@@ -65,7 +65,7 @@ circular_buffer (
     .write_i(write_cmd),
     .rst(rst),
     .clk(clk),
-    .data_o(data_o_raw),
+    //.data_o(data_o_raw),
     .peek_o(peek_o_raw),
     .is_full(is_full_o),
     .is_empty(is_empty_o)
@@ -140,10 +140,10 @@ assign read_cmd = read_i && !is_empty_o;
 always_comb
 begin
   peek_o = peek_o_raw; // 1. Pass the full raw flit to the output port
-  data_o = data_o_raw; 
+  //data_o = data_o_raw; 
 
   peek_o.vc_id = downstream_vc_o; // 2. Overwrite the VC ID directly
-  data_o.vc_id = downstream_vc_o; 
+  //data_o.vc_id = downstream_vc_o; 
   
 
   ss_next = ss;

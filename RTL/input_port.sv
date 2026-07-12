@@ -27,7 +27,7 @@ module input_port #(
     output logic [VC_NUM-1:0] error_o
 );
 
-    flit_t [VC_NUM-1:0] data_out;
+    //flit_t [VC_NUM-1:0] data_out;
     flit_t peek_o [VC_NUM-1:0];
 
 
@@ -67,7 +67,7 @@ module input_port #(
                 .out_port_i(port_new_i[vc]),
                 .rst(rst),
                 .clk(clk),
-                .data_o(data_out[vc]),
+                //.data_o(data_out[vc]),
                 .peek_o(peek_o[vc]),
                 .is_full_o(is_full_o[vc]),
                 .is_empty_o(is_empty_o[vc]),

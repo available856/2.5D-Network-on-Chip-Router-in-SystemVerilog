@@ -1,5 +1,3 @@
-`timescale 1ns/1ps
-
 import noc_params::*;
 
 module circular_buffer #(
@@ -10,15 +8,15 @@ module circular_buffer #(
     input write_i,
     input rst,
     input clk,
-    output flit_t data_o,
+    //output flit_t data_o,
     output flit_t peek_o,
     output logic is_full,
     output logic is_empty
 );
 
-    localparam int POINTER_SIZE = $clog2(BUFFER_SIZE);
+    localparam int POINTER_SIZE = VC_COUNT;
 
-    flit_t memory[BUFFER_SIZE-1:0];
+    flit_t memory [BUFFER_SIZE-1:0];
 
     logic [POINTER_SIZE-1:0] read_ptr;
     logic [POINTER_SIZE-1:0] write_ptr;
@@ -47,7 +45,7 @@ module circular_buffer #(
             read_ptr    <= 0;
             write_ptr   <= 0;
             num_flits   <= 0;
-          	data_o     <= '0;
+          	//data_o     <= '0;
 
         end
         else
@@ -59,8 +57,8 @@ module circular_buffer #(
           if (write_i & ~is_full)
                 memory[write_ptr] <= data_i;
           
-          if (read_i & ~is_empty)
-            	data_o <= memory[read_ptr];
+          /*if (read_i & ~is_empty)
+            	data_o <= memory[read_ptr]; */
         end
     end
 
