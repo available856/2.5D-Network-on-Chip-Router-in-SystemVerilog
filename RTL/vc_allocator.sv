@@ -188,10 +188,10 @@ module vc_allocator (
         
         eligible_vc_set = '0;
 
-        foreach (out_port_set[up_port]) begin
-             foreach (out_port_set[up_port][up_vc]) begin
+        for (int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1) begin
+            for (int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1) begin
                 is_escape_up = (up_vc == ESCAPE); // Assuming VC 0 is Escape, others are Adaptive
-                foreach (out_port_set[up_port][up_vc][down_port]) begin
+                for (int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1) begin
                     if (out_port_set[up_port][up_vc][down_port]) begin
                         for (int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1) begin
                             class_valid = !(is_escape_up && down_vc != ESCAPE); // Escape upstream VC can only allocate Escape downstream VC (VC 0)
