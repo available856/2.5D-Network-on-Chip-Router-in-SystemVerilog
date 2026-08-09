@@ -30,11 +30,11 @@ package noc_params;
     // ------------------------------------------------------------------------
     // 3. Payload Calculations
     // ------------------------------------------------------------------------
-    // Header overhead = Label (2) + X (2) + Y (2) = 6 bits
-    localparam HEADER_SIZE = DEST_ADDR_SIZE_X + DEST_ADDR_SIZE_Y + $bits(flit_label_t);
+    // Header overhead = X (2) + Y (2) = 4 bits
+    localparam HEADER_SIZE = DEST_ADDR_SIZE_X + DEST_ADDR_SIZE_Y;
 
-    // Head Payload = 64 - 6 - 1 = 57 bits
-    localparam HEAD_PAYLOAD_SIZE = FLIT_WIDTH - HEADER_SIZE - $bits(VC_SIZE);
+    // Head Payload = 64 - 4 - 2 - 1 = 57 bits
+    localparam HEAD_PAYLOAD_SIZE = FLIT_WIDTH - HEADER_SIZE - $bits(VC_SIZE) - $bits(flit_label_t);
     
     // Body Payload = 64 - 2 - 1 = 61 bits
     localparam BODY_PAYLOAD_SIZE = FLIT_WIDTH - $bits(flit_label_t) - $bits(VC_SIZE);
@@ -62,11 +62,6 @@ package noc_params;
     } flit_t;
 
     //2-bit vector - Parallel credits
-    typedef logic [VC_NUM-1:0] credits_t;
-
-    typedef struct packed {
-        flit_t flit_pb;
-        credits_t credits_pb;
-    } flit_pb_t;  //Piggybacked flit with credits - 66 bits                  
+    typedef logic [VC_NUM-1:0] credits_t;                  
 
 endpackage
