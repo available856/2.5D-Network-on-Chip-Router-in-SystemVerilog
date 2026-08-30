@@ -3,10 +3,10 @@ package noc_params;
     // ------------------------------------------------------------------------
     // 1. Constants & Geometry
     // ------------------------------------------------------------------------
-    localparam MESH_SIZE_X = 4;
-    localparam MESH_SIZE_Y = 4;
+    localparam MESH_SIZE_X = 2;
+    localparam MESH_SIZE_Y = 2;
 
-    // $clog2(4) = 2 bits
+    // $clog2(2) = 1 bit
     localparam DEST_ADDR_SIZE_X = $clog2(MESH_SIZE_X);
     localparam DEST_ADDR_SIZE_Y = $clog2(MESH_SIZE_Y);
 
@@ -30,14 +30,14 @@ package noc_params;
     // ------------------------------------------------------------------------
     // 3. Payload Calculations
     // ------------------------------------------------------------------------
-    // Header overhead = X (2) + Y (2) = 4 bits
+    // Header overhead = X (1) + Y (1) = 2 bits
     localparam HEADER_SIZE = DEST_ADDR_SIZE_X + DEST_ADDR_SIZE_Y;
 
-    // Head Payload = 64 - 4 - 2 - 1 = 57 bits
-    localparam HEAD_PAYLOAD_SIZE = FLIT_WIDTH - HEADER_SIZE - $bits(VC_SIZE) - $bits(flit_label_t);
+    // Head Payload = 64 - 2 - 2 - 1 = 59 bits
+    localparam HEAD_PAYLOAD_SIZE = FLIT_WIDTH - HEADER_SIZE - VC_SIZE - $bits(flit_label_t);
     
     // Body Payload = 64 - 2 - 1 = 61 bits
-    localparam BODY_PAYLOAD_SIZE = FLIT_WIDTH - $bits(flit_label_t) - $bits(VC_SIZE);
+    localparam BODY_PAYLOAD_SIZE = FLIT_WIDTH - $bits(flit_label_t) - VC_SIZE;
 
     // ------------------------------------------------------------------------
     // 4. Packet Structures
