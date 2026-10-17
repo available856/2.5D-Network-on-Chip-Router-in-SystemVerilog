@@ -18,7 +18,7 @@ module tb_circular_buffer ();
     // DUT signals
     // --------------------------------------------------
     flit_t data_i;
-    flit_t data_o;
+    //flit_t data_o;
     flit_t peek_o;
 
     logic read_i;
@@ -33,88 +33,83 @@ module tb_circular_buffer ();
         .BUFFER_SIZE(VC_DEPTH)
     ) dut (.*);
 
+    flit_t expected_q[$];
+
+    // Drive on the falling edge; peek is checked before the read edge.
+    task write_flit(input int value);
+        begin
+            @(negedge clk);
+            if (is_full) $fatal(1, "Write attempted on a full buffer");
+            data_i = '0;
+            data_i.flit_label = BODY;
+            data_i.data.bt_pl = BODY_PAYLOAD_SIZE'(value);
+            write_i = 1;
+            expected_q.push_back(data_i);
+            @(negedge clk);
+            write_i = 0;
+        end
+    endtask
+
+    task read_flit;
+        flit_t expected;
+        begin
+            @(negedge clk);
+            if (is_empty || expected_q.size() == 0) $fatal(1, "Unexpected empty buffer");
+            expected = expected_q.pop_front();
+            if (peek_o !== expected) $fatal(1, "FIFO order or payload mismatch");
+            read_i = 1;
+            @(negedge clk);
+            read_i = 0;
+        end
+    endtask
+
     // --------------------------------------------------
     // Test sequence
     // --------------------------------------------------
     initial begin
-        // Default values
-        rst =     1;
-        read_i =  0;
-        write_i=  0;
+        rst = 1;
+        read_i = 0;
+        write_i = 0;
         data_i = '0;
-        
-
-        // Hold reset for a couple of cycles
-    repeat (2) @(posedge clk);
-        rst <= 0;
-
-      $display("[%0t] -----------Reset released !----------", $time);
-
-        // --------------------------------------------------
-        // Write 4 flits
-        // --------------------------------------------------
-      repeat (VC_DEPTH) begin
-            @(posedge clk);
-          
-            write_i <= 1;
-            data_i.flit_label <= HEAD;   // label not functionally important here
-            data_i.data.bt_pl <= 62'($random);
-            $strobe("[%0t] WRITE flit = %h", $time,data_i.data.bt_pl);
-        end
-
-        @(posedge clk);
-        write_i <= 0;//Stop Writing
-      
-      // CHECK: Buffer should be FULL now
+        repeat (2) @(negedge clk);
+        rst = 0;
         #1;
-        if (is_full) $strobe("[%0t] SUCCESS: Buffer is FULL.", $time);
-        else         $error("[%0t] FAIL: Buffer should be full!", $time);
+        if (!is_empty || is_full) $fatal(1, "Reset flags failed");
 
-        // --------------------------------------------------
-        // Observe peek (non-destructive)
-        // --------------------------------------------------
-        @(posedge clk);
-        $strobe("[%0t] PEEK flit = %h (is_empty=%0d)",
-                 $time, peek_o.data.bt_pl, is_empty);
-      
-       // --------------------------------------------------
-        // Read 2 flits back
-        // --------------------------------------------------
-      repeat (2) begin
-            @(posedge clk);
-            read_i <= 1;
-
-            @(posedge clk); // data_o updates on read
-            read_i <= 0;
-
-           $strobe("[%0t] READ flit = %h (is_empty=%0d)",
-                     $time, data_o.data.bt_pl, is_empty);  
-          
+        // Write to full, then check that peek does not remove data.
+        for (int i = 0; i < VC_DEPTH; i++) write_flit(i);
+        if (!is_full) $fatal(1, "Buffer should be full");
+        repeat (2) begin
+            @(negedge clk);
+            if (peek_o !== expected_q[0] || !is_full) $fatal(1, "Peek changed the buffer");
         end
 
-       // --------------------------------------------------
-        // Write 2 flits
-        // --------------------------------------------------
-      repeat (2) begin
-            @(posedge clk);
-          
-            write_i <= 1;
-            data_i.flit_label <= HEAD;   // label not functionally important here
-            data_i.data.bt_pl <= 62'($random);
-            $strobe("[%0t] WRITE flit = %h", $time,data_i.data.bt_pl);
+        // Read two, then write two to exercise pointer wraparound.
+        repeat (2) read_flit();
+        write_flit(VC_DEPTH);
+        write_flit(VC_DEPTH+1);
+        if (!is_full) $fatal(1, "Buffer should be full after wraparound");
+
+        // Simultaneous read/write with room available preserves occupancy.
+        read_flit();
+        @(negedge clk);
+        begin
+            flit_t expected;
+            expected = expected_q.pop_front();
+            if (peek_o !== expected) $fatal(1, "Simultaneous read mismatch");
         end
+        data_i.data.bt_pl = BODY_PAYLOAD_SIZE'(VC_DEPTH+2);
+        expected_q.push_back(data_i);
+        read_i = 1;
+        write_i = 1;
+        @(negedge clk);
+        read_i = 0;
+        write_i = 0;
+        if (is_empty || is_full) $fatal(1, "Simultaneous transfer changed occupancy");
 
-        @(posedge clk);
-        write_i <= 0;
-      
-
-        // --------------------------------------------------
-        // Final state
-        // --------------------------------------------------
-        @(posedge clk);
-        $strobe("[%0t] DONE (is_empty=%0d, is_full=%0d)",
-                 $time, is_empty, is_full);
-
+        while (expected_q.size() != 0) read_flit();
+        if (!is_empty) $fatal(1, "Buffer did not drain");
+        $display("Circular Buffer basic tests PASSED");
         $finish;
     end
 

@@ -24,7 +24,6 @@ module tb_vc_buffer;
     logic vc_valid_i;
     port_t out_port_i;
 
-    flit_t data_o;
     flit_t peek_o;
 
     logic  is_full_o;
@@ -38,7 +37,6 @@ module tb_vc_buffer;
     logic [VC_SIZE-1:0] downstream_vc_o;
     logic error_o;
 
-    vc_class_t vc_class_o;
 
     flit_t expected_q[$];
     int error_count = 0;
@@ -72,6 +70,8 @@ module tb_vc_buffer;
             vc_valid_i = 0;
             data_i = '0;
             out_port_i = LOCAL;
+            vc_new_i = 0;
+            expected_q.delete();
             @(negedge clk);
             rst = 0;
             @(negedge clk);
@@ -79,7 +79,7 @@ module tb_vc_buffer;
     endtask
 
 
-    task send_flit(input flit_label_t label, input logic [BODY_PAYLOAD_SIZE-1:0] data, input logic [VC_SIZE-1:0] vc_id,
+    task send_flit(input flit_label_t label, input logic [VC_SIZE-1:0] vc_id, input logic [BODY_PAYLOAD_SIZE-1:0] data,
         input port_t out_port);
         out_port_i = LOCAL; // Default to LOCAL for non-HEAD flits
         begin
@@ -128,24 +128,17 @@ module tb_vc_buffer;
             for (int i = 0; i < count; i++) begin
                 wait(switch_request_o);
                 @(negedge clk);
+                // FWFT data must be sampled before the clock removes it.
+                if (expected_q.size() == 0) $fatal(1, "Expected queue is empty");
+                expected_flit = expected_q.pop_front();
+                expected_flit.vc_id = downstream_vc_o;
+                if (peek_o !== expected_flit) $fatal(1, "VC buffer payload/order mismatch");
                 read_i = 1;
                 @(negedge clk);
                 read_i = 0;
-
-            if (expected_q.size() == 0) begin
-                $display("[FAIL] Queue empty but DUT produced data!--[%0t]", $time);
-                error_count++;
-            end 
-
-            else begin
-                expected_flit = expected_q.pop_front();
-                expected_flit.vc_id = dut.downstream_vc_o;
-                $display("Data extracted from queue. -- [%0t]", $time);
-                if (data_o !== expected_flit) begin
-                    $display("[FAIL] Data mismatch! Expected: %h, Got: %h --[%0t]", expected_flit, data_o, $time);
-                    error_count++;
-                    end
-                end
+                if (error_o) $fatal(1, "Unexpected VC protocol error");
+                if ((expected_flit.flit_label == TAIL || expected_flit.flit_label == HEADTAIL) && !vc_allocatable_o)
+                    $fatal(1, "Tail did not release the VC");
             end
         end
     endtask
@@ -203,7 +196,7 @@ module tb_vc_buffer;
 
         send_flit(HEAD, VC_SIZE'($urandom), BODY_PAYLOAD_SIZE'($urandom), SOUTH); // Illegal HEAD while first packet is active
 
-       wait(error_o);
+       if (!error_o) $fatal(1, "Illegal HEAD was not flagged");
             $display("[PASS] Illegal HEAD correctly flagged-[%0t]", $time);
             expected_q.delete();
 
@@ -212,10 +205,15 @@ module tb_vc_buffer;
         if (error_count == 0)
             $display("\n[PASS] All tests passed! ---[%0t]", $time);
         else
-            $display("\n[FAIL] %0d errors detected! ---[%0t]", error_count, $time);
+            $fatal(1, "%0d errors detected", error_count);
 
-        $display("\n--- Test Finished ---[%0t]", $time);
+        $display("VC Buffer basic tests PASSED");
         $finish;
     end
+
+initial begin
+    #(CLK_PERIOD*100);
+    $fatal(1, "VC Buffer test timed out");
+end
 
 endmodule

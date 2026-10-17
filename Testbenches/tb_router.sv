@@ -15,6 +15,12 @@ module tb_router;
     logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_pending; // Track pending credits for each port, VC, and buffer slot
     
     logic reset_done;
+    // Match each transmitted flit, preserving packet order and its selected route.
+    flit_t expected_flit[64];
+    bit arrived[64];
+    int head_of[64], previous[64], routed_port[64], routed_vc[64];
+    int input_head[PORT_NUM][VC_NUM], input_last[PORT_NUM][VC_NUM];
+    int sent = 0, received = 0;
 
     //interfaces
     router2router router_if_local_up();
@@ -65,6 +71,11 @@ module tb_router;
         begin
         @(negedge clk);
         rst = 1;
+        router_if_local_down.data = '0; router_if_local_down.is_valid = 0;
+        router_if_north_down.data = '0; router_if_north_down.is_valid = 0;
+        router_if_south_down.data = '0; router_if_south_down.is_valid = 0;
+        router_if_west_down.data = '0; router_if_west_down.is_valid = 0;
+        router_if_east_down.data = '0; router_if_east_down.is_valid = 0;
         repeat(2) @(negedge clk);
         rst = 0;
         @(posedge clk);
@@ -91,22 +102,41 @@ module tb_router;
         router_if_west_up.is_allocatable  <= '0;
         router_if_east_up.is_allocatable  <= '0;
 
-        // 2. IMMEDIATE VC Release
-        if (router_if_local_up.is_valid && (router_if_local_up.data.flit_label == TAIL || router_if_local_up.data.flit_label == HEADTAIL))
-            router_if_local_up.is_allocatable[router_if_local_up.data.vc_id] <= 1'b1;
+        // 2. IMMEDIATE VC Release && Credits upstream signaling
+        if (router_if_local_up.is_valid) begin
+            if (!credit_stall)
+                router_if_local_up.credits[router_if_local_up.data.vc_id] <= 1'b1;
+            if (router_if_local_up.data.flit_label == TAIL || router_if_local_up.data.flit_label == HEADTAIL)
+                    router_if_local_up.is_allocatable[router_if_local_up.data.vc_id] <= 1'b1;
+        end 
 
-        if (router_if_north_up.is_valid && (router_if_north_up.data.flit_label == TAIL || router_if_north_up.data.flit_label == HEADTAIL))
-            router_if_north_up.is_allocatable[router_if_north_up.data.vc_id] <= 1'b1;
+        if (router_if_north_up.is_valid) begin
+            if (!credit_stall)
+                router_if_north_up.credits[router_if_north_up.data.vc_id] <= 1'b1;
+            if (router_if_north_up.data.flit_label == TAIL || router_if_north_up.data.flit_label == HEADTAIL)
+                router_if_north_up.is_allocatable[router_if_north_up.data.vc_id] <= 1'b1;
+        end
 
-        if (router_if_south_up.is_valid && (router_if_south_up.data.flit_label == TAIL || router_if_south_up.data.flit_label == HEADTAIL))
-            router_if_south_up.is_allocatable[router_if_south_up.data.vc_id] <= 1'b1;
+        if (router_if_south_up.is_valid) begin
+            if (!credit_stall)
+                router_if_south_up.credits[router_if_south_up.data.vc_id] <= 1'b1;
+            if (router_if_south_up.data.flit_label == TAIL || router_if_south_up.data.flit_label == HEADTAIL)
+                router_if_south_up.is_allocatable[router_if_south_up.data.vc_id] <= 1'b1;
+        end
 
-        if (router_if_west_up.is_valid && (router_if_west_up.data.flit_label == TAIL || router_if_west_up.data.flit_label == HEADTAIL))
-            router_if_west_up.is_allocatable[router_if_west_up.data.vc_id] <= 1'b1;
+        if (router_if_west_up.is_valid) begin
+            if (!credit_stall)
+                router_if_west_up.credits[router_if_west_up.data.vc_id] <= 1'b1;
+            if (router_if_west_up.data.flit_label == TAIL || router_if_west_up.data.flit_label == HEADTAIL)
+                router_if_west_up.is_allocatable[router_if_west_up.data.vc_id] <= 1'b1;
+        end
 
-        if (router_if_east_up.is_valid && (router_if_east_up.data.flit_label == TAIL || router_if_east_up.data.flit_label == HEADTAIL))
-            router_if_east_up.is_allocatable[router_if_east_up.data.vc_id] <= 1'b1;
-
+        if (router_if_east_up.is_valid) begin
+            if (!credit_stall)
+                router_if_east_up.credits[router_if_east_up.data.vc_id] <= 1'b1;
+            if (router_if_east_up.data.flit_label == TAIL || router_if_east_up.data.flit_label == HEADTAIL)
+                router_if_east_up.is_allocatable[router_if_east_up.data.vc_id] <= 1'b1;
+        end
 
 
         // 3. Credit Stalling Logic
@@ -116,9 +146,9 @@ module tb_router;
                 credits_pending[LOCAL][router_if_local_up.data.vc_id] <= credits_pending[LOCAL][router_if_local_up.data.vc_id] + 1;
         end 
         else begin
-            // Drain backlog (max 1 credit per cycle per VC)
+            // Drain backlog when a new flit is not already returning this VC's credit.
             for (int vc = 0; vc < VC_NUM; vc++) begin
-                if (credits_pending[LOCAL][vc] > 0) begin
+                if (credits_pending[LOCAL][vc] > 0 && !(router_if_local_up.is_valid && router_if_local_up.data.vc_id == vc)) begin
                     router_if_local_up.credits[vc] <= 1'b1;
                     credits_pending[LOCAL][vc] <= credits_pending[LOCAL][vc] - 1;
                 end
@@ -132,7 +162,7 @@ module tb_router;
         end 
         else begin 
             for (int vc = 0; vc < VC_NUM; vc++) begin
-                if (credits_pending[NORTH][vc] > 0) begin
+                if (credits_pending[NORTH][vc] > 0 && !(router_if_north_up.is_valid && router_if_north_up.data.vc_id == vc)) begin
                     router_if_north_up.credits[vc] <= 1'b1;
                     credits_pending[NORTH][vc] <= credits_pending[NORTH][vc] - 1;
                 end
@@ -146,7 +176,7 @@ module tb_router;
         end 
         else begin
             for (int vc = 0; vc < VC_NUM; vc++) begin
-                if (credits_pending[SOUTH][vc] > 0) begin
+                if (credits_pending[SOUTH][vc] > 0 && !(router_if_south_up.is_valid && router_if_south_up.data.vc_id == vc)) begin
                     router_if_south_up.credits[vc] <= 1'b1;
                     credits_pending[SOUTH][vc] <= credits_pending[SOUTH][vc] - 1;
                 end
@@ -160,7 +190,7 @@ module tb_router;
         end 
         else begin
             for (int vc = 0; vc < VC_NUM; vc++) begin
-                if (credits_pending[WEST][vc] > 0) begin
+                if (credits_pending[WEST][vc] > 0 && !(router_if_west_up.is_valid && router_if_west_up.data.vc_id == vc)) begin
                     router_if_west_up.credits[vc] <= 1'b1;
                     credits_pending[WEST][vc] <= credits_pending[WEST][vc] - 1;
                 end
@@ -174,7 +204,7 @@ module tb_router;
         end 
         else begin
             for (int vc = 0; vc < VC_NUM; vc++) begin
-                if (credits_pending[EAST][vc] > 0) begin
+                if (credits_pending[EAST][vc] > 0 && !(router_if_east_up.is_valid && router_if_east_up.data.vc_id == vc)) begin
                     router_if_east_up.credits[vc] <= 1'b1;
                     credits_pending[EAST][vc] <= credits_pending[EAST][vc] - 1;
                 end
@@ -269,8 +299,8 @@ module tb_router;
     begin
         for (int i = 0; i < 2; i++) begin
             flit[i] = '0;
-            body_dest_x[i] = DEST_ADDR_SIZE_X'($urandom_range(0,3));
-            body_test_y[i] = DEST_ADDR_SIZE_Y'($urandom_range(0,3));
+            body_dest_x[i] = DEST_ADDR_SIZE_X'($urandom_range(0,MESH_SIZE_X-1));
+            body_test_y[i] = DEST_ADDR_SIZE_Y'($urandom_range(0,MESH_SIZE_Y-1));
             head_pl[i] = HEAD_PAYLOAD_SIZE'({$urandom,$urandom});
             bt_pl[i] = BODY_PAYLOAD_SIZE'({$urandom,$urandom});
         end
@@ -378,16 +408,16 @@ module tb_router;
         vc_id[1] = 1;
         label[0] = HEAD;
         label[1] = HEAD;
-        x_dest[0] = 3;
-        y_dest[0] = 2;
-        x_dest[1] = 3;
-        y_dest[1] = 2;
+        x_dest[0] = 0;
+        y_dest[0] = 1;
+        x_dest[1] = 0;
+        y_dest[1] = 1;
 
         parallel_receive_flit(up_router, x_dest, y_dest, label, vc_id);
         parallel_receive_flit(up_router, x_dest, y_dest, '{BODY, BODY}, vc_id);
         parallel_receive_flit(up_router, x_dest, y_dest, '{TAIL, TAIL}, vc_id);
  
-        repeat (10) @(posedge clk);
+        repeat (6) @(posedge clk);
     end
     endtask
 
@@ -396,13 +426,15 @@ module tb_router;
             $display("[%0t] Starting Single-flit packet test...", $time);
             $display("-------------------------------");
             repeat(2) @(posedge clk);
-            receive_flit(LOCAL, 2, 3, HEADTAIL, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL Y routing - adaptive VC
+            receive_flit(LOCAL, 1, 1, HEADTAIL, 0, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); // Local ejection
             repeat(5) @(posedge clk);
-            receive_flit(LOCAL, 2, 3, HEADTAIL, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL to test VC reuse
+            receive_flit(LOCAL, 1, 0, HEADTAIL, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL Y routing - adaptive VC
             repeat(5) @(posedge clk);
-            receive_flit(NORTH, 1, 0, HEADTAIL, 0, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL XY routing - escape VC
+            receive_flit(LOCAL, 1, 0, HEADTAIL, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL to test VC reuse
             repeat(5) @(posedge clk);
-            receive_flit(NORTH, 1, 0, HEADTAIL, 0, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL to test VC reuse
+            receive_flit(NORTH, 0, 0, HEADTAIL, 0, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL XY routing - escape VC
+            repeat(5) @(posedge clk);
+            receive_flit(NORTH, 0, 0, HEADTAIL, 0, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Single HEADTAIL to test VC reuse
             repeat(5) @(posedge clk);
         end
     endtask
@@ -411,69 +443,124 @@ module tb_router;
         begin
             $display("[%0t] Starting Multi-flit packet test...", $time);
             $display("-------------------------------");
-            receive_flit(LOCAL, 3, 3, HEAD, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Adaptive Routing - adaptive VC
-            receive_flit(LOCAL, DEST_ADDR_SIZE_X'($urandom_range(0,3)), DEST_ADDR_SIZE_Y'($urandom_range(0,3)), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); //Body flit
-            receive_flit(LOCAL, DEST_ADDR_SIZE_X'($urandom_range(0,3)), DEST_ADDR_SIZE_Y'($urandom_range(0,3)), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); //Body flit
-            receive_flit(LOCAL, DEST_ADDR_SIZE_X'($urandom_range(0,3)), DEST_ADDR_SIZE_Y'($urandom_range(0,3)), TAIL, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); //Tail flit 
-            repeat(2) @(posedge clk);
+            receive_flit(LOCAL, 0, 0, HEAD, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); //Adaptive Routing - adaptive VC
+            receive_flit(LOCAL, DEST_ADDR_SIZE_X'($urandom_range(0,MESH_SIZE_X-1)), DEST_ADDR_SIZE_Y'($urandom_range(0,MESH_SIZE_Y-1)), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); //Body flit
+            receive_flit(LOCAL, DEST_ADDR_SIZE_X'($urandom_range(0,MESH_SIZE_X-1)), DEST_ADDR_SIZE_Y'($urandom_range(0,MESH_SIZE_Y-1)), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); //Body flit
+            receive_flit(LOCAL, DEST_ADDR_SIZE_X'($urandom_range(0,MESH_SIZE_X-1)), DEST_ADDR_SIZE_Y'($urandom_range(0,MESH_SIZE_Y-1)), TAIL, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); //Tail flit 
+            repeat(5) @(posedge clk);
         end
     endtask
 
     task credit_stall_test;
+        int before_stall;
         begin
             $display("[%0t] Starting Credit Stalling test...", $time);
             $display("-------------------------------");
-            credit_stall = 1; // Enable credit stalling
-            receive_flit(NORTH, 1, 1, HEAD, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); // This flit will be accepted but credits will be stalled, causing backpressure
-            receive_flit(NORTH, $urandom_range(0,3), $urandom_range(0,3), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); 
-            receive_flit(NORTH, $urandom_range(0,3), $urandom_range(0,3), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); 
-            receive_flit(NORTH, $urandom_range(0,3), $urandom_range(0,3), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom}));
-            receive_flit(NORTH, $urandom_range(0,3), $urandom_range(0,3), TAIL, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom}));
+            @(negedge clk);
+            before_stall = received;
+            credit_stall = 1; // Withhold returns until one VC's credits are exhausted
+            receive_flit(NORTH, 0, 1, HEAD, 1, HEAD_PAYLOAD_SIZE'({$urandom,$urandom}), '0); // This flit will be accepted but credits will be stalled, causing backpressure
+            receive_flit(NORTH, $urandom_range(0,MESH_SIZE_X-1), $urandom_range(0,MESH_SIZE_Y-1), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); 
+            receive_flit(NORTH, $urandom_range(0,MESH_SIZE_X-1), $urandom_range(0,MESH_SIZE_Y-1), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom})); 
+            receive_flit(NORTH, $urandom_range(0,MESH_SIZE_X-1), $urandom_range(0,MESH_SIZE_Y-1), BODY, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom}));
+            receive_flit(NORTH, $urandom_range(0,MESH_SIZE_X-1), $urandom_range(0,MESH_SIZE_Y-1), TAIL, 1, '0, BODY_PAYLOAD_SIZE'({$urandom,$urandom}));
             repeat (5) @(posedge clk);
-            credit_stall = 0; // Disable credit stalling to allow backlogged credits to be processed
+            @(negedge clk);
+            if (received-before_stall != VC_DEPTH) $fatal(1, "Credit stall did not stop the fifth flit");
+            credit_stall = 0; // Return credits and allow the tail to continue
             repeat (6) @(posedge clk); 
         end
     endtask
 
-    always_ff @(posedge clk) begin
-        #2;
-        if (reset_done) begin
-            $display("[%0t]-Upstream links Status:", $time);
-            $display("LOCAL UP: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_local_up.data, router_if_local_up.is_valid, router_if_local_up.credits, router_if_local_up.is_allocatable);
-            $display("NORTH UP: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_north_up.data, router_if_north_up.is_valid, router_if_north_up.credits, router_if_north_up.is_allocatable);
-            $display("SOUTH UP: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_south_up.data, router_if_south_up.is_valid, router_if_south_up.credits, router_if_south_up.is_allocatable);
-            $display("WEST UP: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_west_up.data, router_if_west_up.is_valid, router_if_west_up.credits, router_if_west_up.is_allocatable);
-            $display("EAST UP: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_east_up.data, router_if_east_up.is_valid, router_if_east_up.credits, router_if_east_up.is_allocatable);
-            $display("[%0t]-Downstream links Status:", $time);
-            $display("LOCAL DOWN: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_local_down.data, router_if_local_down.is_valid, router_if_local_down.credits, router_if_local_down.is_allocatable);
-            $display("NORTH DOWN: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_north_down.data, router_if_north_down.is_valid, router_if_north_down.credits, router_if_north_down.is_allocatable);
-            $display("SOUTH DOWN: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_south_down.data, router_if_south_down.is_valid, router_if_south_down.credits, router_if_south_down.is_allocatable);
-            $display("WEST DOWN: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_west_down.data, router_if_west_down.is_valid, router_if_west_down.credits, router_if_west_down.is_allocatable);
-            $display("EAST DOWN: data=0x%h, is_valid=%b, credits=%b, is_allocatable=%b", router_if_east_down.data, router_if_east_down.is_valid, router_if_east_down.credits, router_if_east_down.is_allocatable);
-            $display("------------------------------\n");
+    function automatic flit_t without_vc(input flit_t flit);
+        flit.vc_id = 0;
+        return flit;
+    endfunction
 
-            for (int i = 0; i < PORT_NUM; i++) begin
-                for (int j = 0; j < VC_NUM; j++) begin
-                    if (error[i][j]) begin
-                        $error("[%0t]-Error detected on port %0d, VC %0d", $time, i, j);
+    function automatic port_t xy_port(input flit_t flit);
+        if (flit.data.head_data.x_dest < MESH_SIZE_X/2) return WEST;
+        if (flit.data.head_data.x_dest > MESH_SIZE_X/2) return EAST;
+        if (flit.data.head_data.y_dest < MESH_SIZE_Y/2) return SOUTH;
+        if (flit.data.head_data.y_dest > MESH_SIZE_Y/2) return NORTH;
+        return LOCAL;
+    endfunction
+
+    // Sample transfers on their accepting edge, rather than after FIFO updates.
+    always @(posedge clk) begin
+        if (reset_done && !rst) begin
+            for (int p = 0; p < PORT_NUM; p++) begin
+                if (error[p] != '0) $fatal(1, "Router error on input %0d", p);
+                if (dut.is_valid_in[p]) begin
+                    int v; v = int'(dut.data_in[p].vc_id);
+                    if (sent == 64 || dut.input_block.is_full[p][v]) $fatal(1, "Router input/scoreboard full");
+                    expected_flit[sent] = dut.data_in[p];
+                    if (dut.data_in[p].flit_label == HEAD || dut.data_in[p].flit_label == HEADTAIL) begin
+                        input_head[p][v] = sent;
+                        input_last[p][v] = -1;
                     end
+                    head_of[sent] = input_head[p][v]; previous[sent] = input_last[p][v];
+                    input_last[p][v] = sent;
+                    sent++;
                 end
             end
-
+            for (int p = 0; p < PORT_NUM; p++) if (dut.is_valid_out[p]) begin
+                int match_id, h;
+                flit_t flit;
+                flit = dut.data_out[p]; match_id = -1;
+                for (int i = 0; i < sent; i++) if (!arrived[i] && without_vc(expected_flit[i]) === without_vc(flit)) begin
+                    match_id = i; break;
+                end
+                if (match_id < 0) $fatal(1, "Router duplicate or corrupted output");
+                h = head_of[match_id];
+                if (previous[match_id] >= 0 && !arrived[previous[match_id]]) $fatal(1, "Router reordered a packet");
+                if (match_id == h) begin
+                    if (flit.vc_id == ESCAPE) begin
+                        if (p != int'(xy_port(flit))) $fatal(1, "Escape output did not follow XY");
+                    end
+                    else if (!((p == WEST && flit.data.head_data.x_dest < MESH_SIZE_X/2) ||
+                               (p == SOUTH && flit.data.head_data.y_dest < MESH_SIZE_Y/2) ||
+                               (p == LOCAL && flit.data.head_data.x_dest == MESH_SIZE_X/2 && flit.data.head_data.y_dest == MESH_SIZE_Y/2)))
+                        $fatal(1, "Adaptive output is not a minimal 2x2 route");
+                    if (expected_flit[h].vc_id == ESCAPE && flit.vc_id != ESCAPE) $fatal(1, "Escape returned to adaptive");
+                    routed_port[h] = p; routed_vc[h] = int'(flit.vc_id);
+                end
+                if (p != routed_port[h] || int'(flit.vc_id) != routed_vc[h]) $fatal(1, "Packet route/VC changed after HEAD");
+                arrived[match_id] = 1; received++;
+            end
         end
     end
+
+    task wait_for_delivery;
+    begin
+        for (int i = 0; i < 100 && received != sent; i++) @(negedge clk);
+        if (received != sent) $fatal(1, "Router did not drain: sent=%0d received=%0d", sent, received);
+        repeat (3) @(negedge clk); // Let final credit and release pulses return.
+    end
+    endtask
 
     initial begin
         reset_dut();
 
         single_flit_test();
+        wait_for_delivery();
         multi_flit_test();
+        wait_for_delivery();
         credit_stall_test();
+        wait_for_delivery();
         parallel_packet_test();
-
-
-
+        wait_for_delivery();
+        for (int p = 0; p < PORT_NUM; p++) for (int v = 0; v < VC_NUM; v++) begin
+            if (dut.input_block.credits_counter[p][v] != VC_DEPTH || credits_pending[p][v] != 0)
+                $fatal(1, "Router credits were not fully restored");
+        end
+        if (sent != 20) $fatal(1, "A basic router scenario was skipped");
+        $display("Router basic tests PASSED: %0d flits delivered", received);
         $finish;
+    end
+
+    initial begin
+        #(CLK_PERIOD*500);
+        $fatal(1, "Router test timed out");
     end
 
 endmodule
