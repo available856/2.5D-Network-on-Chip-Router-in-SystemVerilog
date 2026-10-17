@@ -27,6 +27,7 @@ module separable_input_first_allocator(
             round_robin_arbiter (
                 .rst(rst),
                 .clk(clk),
+                .advance_i(|grant_o[in_arb]), // Advance the arbiter if a VC from this Input Port was granted access to an Output Port
                 .requests_i(request_i[in_arb]),
                 .grants_o(vc_grant[in_arb])
             );
@@ -48,6 +49,7 @@ module separable_input_first_allocator(
             round_robin_arbiter (
                 .rst(rst),
                 .clk(clk),
+                .advance_i(1'b1),
                 .requests_i(out_request[out_arb]),
                 .grants_o(ip_grant[out_arb])
             );

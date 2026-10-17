@@ -20,7 +20,8 @@ module input_port #(
     output logic sa_request_o [VC_NUM-1:0],
     output logic [VC_SIZE-1:0] sa_downstream_vc_o [VC_NUM-1:0],
     output port_t [VC_NUM-1:0] out_port_o,
-    output logic [VC_NUM-1:0][PORT_NUM-1:0] out_port_set_o,
+    output logic [VC_NUM-1:0][PORT_NUM-1:0] adaptive_port_set_o,
+    output logic [VC_NUM-1:0][PORT_NUM-1:0] escape_port_set_o,
     output credits_t credit_return_o,
     output logic [VC_NUM-1:0] is_full_o,
     output logic [VC_NUM-1:0] is_empty_o,
@@ -89,9 +90,10 @@ module input_port #(
             ) rc_unit (
                 .x_dest_i(x_dest[vc]),
                 .y_dest_i(y_dest[vc]),
-                .vc_class_i(vc_class_t'(vc)),
+                //.vc_class_i(vc_class_t'(vc)),
                 .rc_valid_i(rc_valid[vc]),
-                .eligible_port_set(out_port_set_o[vc])
+                .adaptive_port_set(adaptive_port_set_o[vc]),
+                .escape_port_set(escape_port_set_o[vc])
             );
         end
     endgenerate

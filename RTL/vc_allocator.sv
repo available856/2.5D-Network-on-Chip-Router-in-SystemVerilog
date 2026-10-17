@@ -7,12 +7,17 @@ import noc_params::*;
 // - Guarantees one-to-one mapping (no collisions)
 // ------------------------------------------------------------
 
-module vc_allocator (
+module vc_allocator #(
+    parameter int unsigned ADAPTIVE_TIMEOUT = 5 // Must be >= 0
+)(
     input rst,
     input clk,
     input [PORT_NUM-1:0][VC_NUM-1:0] idle_downstream_vc_i,
     input_block2vc_allocator.vc_allocator ib_if
 );
+    // Count sampled VA-request cycles without a final allocation grant to an adaptive upstream VC.
+    localparam TIMEOUT_WIDTH = (ADAPTIVE_TIMEOUT < 2) ? 1 : $clog2(ADAPTIVE_TIMEOUT + 1);
+
 
     // Number of resources ((port, VC) pairs)
     localparam NUM_RESOURCES = PORT_NUM * VC_NUM; // Total downstream VC resources (port × VC)
@@ -21,6 +26,9 @@ module vc_allocator (
     /* Flattened index mapping:
     agent_id  = up_port * VC_NUM + up_vc
     resource_id = down_port * VC_NUM + down_vc */
+
+    logic [PORT_NUM-1:0][VC_NUM-1:0][TIMEOUT_WIDTH-1:0] wait_counter;
+    logic [PORT_NUM-1:0][VC_NUM-1:0] escape_pending;
 
     
     logic [NUM_AGENTS-1:0][NUM_RESOURCES-1:0] requests_1;
@@ -43,6 +51,7 @@ module vc_allocator (
             ) rr_1 (
                 .rst(rst),
                 .clk(clk),
+                .advance_i(ib_if.vc_valid[i / VC_NUM][i % VC_NUM]), // Only advance if the agent was granted a resource
                 .requests_i(requests_1[i]),
                 .grants_o(grants_1[i])
             );
@@ -61,35 +70,55 @@ module vc_allocator (
         ) rr_2 (
             .rst(rst),
             .clk(clk),
+            .advance_i(1'b1), // Always advance on every cycle
             .requests_i(requests_2[p]),
             .grants_o(grants_2[p])
         );
     end
     endgenerate
 
-
     /*
     Sequential logic:
     - reset on the rising edge of the rst input;
     - update the availability of downstream Virtual Channels.
     */
-    always_ff@(posedge clk, posedge rst)
-    begin
-        if(rst)
-        begin
+    always_ff @(posedge clk or posedge rst) begin
+        if (rst) begin
             is_available_vc <= {PORT_NUM*VC_NUM{1'b1}};
-        end
-        else
-        begin
+            wait_counter <= '0;
+        end 
+        else begin
             is_available_vc <= is_available_vc_next;
+
+            for (int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1) begin
+                for (int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1) begin
+                    if ((up_vc != ADAPTIVE) || !ib_if.vc_request[up_port][up_vc] ||
+                        ib_if.vc_valid[up_port][up_vc]) begin
+                        wait_counter[up_port][up_vc] <= '0;
+                    end 
+                    else if (wait_counter[up_port][up_vc] < TIMEOUT_WIDTH'(ADAPTIVE_TIMEOUT)) begin
+                            wait_counter[up_port][up_vc] <= wait_counter[up_port][up_vc] + TIMEOUT_WIDTH'(1);
+                        end
+                    end
+                    // Otherwise hold saturated count and sticky pending.
+                end
+            end
         end
-    end
 
     
     always_comb
     begin
 
         is_available_vc_next = is_available_vc;
+
+        escape_pending = '0;
+
+        // Combinational Flag Generation
+        for (int p = 0; p < PORT_NUM; p++) begin
+            for (int v = 0; v < VC_NUM; v++) begin
+                escape_pending[p][v] = (wait_counter[p][v] >= TIMEOUT_WIDTH'(ADAPTIVE_TIMEOUT));
+            end
+        end
 
         for(int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1)
         begin
@@ -109,7 +138,7 @@ module vc_allocator (
             end
         end
 
-        eligible_vc_set_w = eligible_vc_set(ib_if.out_port_set, is_available_vc, ib_if.credits_exist);
+        eligible_vc_set_w = eligible_vc_set(ib_if.adaptive_port_set, ib_if.escape_port_set, escape_pending, is_available_vc, ib_if.credits_exist);
 
         // ------------------------------------------------------------
         // Stage 1 Requests (Agent → Resource)
@@ -178,28 +207,52 @@ module vc_allocator (
     // - VC class constraints (deadlock avoidance)
     // ------------------------------------------------------------
     function automatic logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set (
-        input logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] out_port_set,
+        input logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] adaptive_port_set,
+        input logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0] escape_port_set,
+        input logic [PORT_NUM-1:0][VC_NUM-1:0] escape_pending_i,
         input logic [PORT_NUM-1:0][VC_NUM-1:0] is_available_vc_i,
         input logic [PORT_NUM-1:0][VC_NUM-1:0] credits
         );
 
-        logic class_valid;
-        logic is_escape_up;        
+        logic class_valid_adaptive;
+        logic class_valid_escape;
+        logic is_adaptive_up;
+        logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set_adaptive;
+        logic [PORT_NUM-1:0][VC_NUM-1:0][PORT_NUM-1:0][VC_NUM-1:0] eligible_vc_set_escape;        
         
+        eligible_vc_set_adaptive = '0;
+        eligible_vc_set_escape = '0;
         eligible_vc_set = '0;
+        is_adaptive_up = 1'b0;
+        class_valid_adaptive = 1'b0;
+        class_valid_escape = 1'b0;
 
         for (int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1) begin
             for (int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1) begin
-                is_escape_up = (up_vc == ESCAPE); // Assuming VC 0 is Escape, others are Adaptive
+                is_adaptive_up = (up_vc == ADAPTIVE); // Assuming VC 1 is Adaptive
                 for (int down_port = 0; down_port < PORT_NUM; down_port = down_port + 1) begin
-                    if (out_port_set[up_port][up_vc][down_port]) begin
+                    if (adaptive_port_set[up_port][up_vc][down_port]) begin
                         for (int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1) begin
-                            class_valid = !(is_escape_up && down_vc != ESCAPE); // Escape upstream VC can only allocate Escape downstream VC (VC 0)
-                            if (is_available_vc_i[down_port][down_vc] && credits[down_port][down_vc] && class_valid) begin
-                                eligible_vc_set[up_port][up_vc][down_port][down_vc] = 1'b1;
+                            class_valid_adaptive = (is_adaptive_up && down_vc == ADAPTIVE); // Adaptive upstream VC can only allocate Adaptive downstream VC (VC 1)
+                            if (is_available_vc_i[down_port][down_vc] && credits[down_port][down_vc] && class_valid_adaptive) begin
+                                eligible_vc_set_adaptive[up_port][up_vc][down_port][down_vc] = 1'b1;
+                            end
+                        end
+                    end                          
+                    if (escape_port_set[up_port][up_vc][down_port]) begin
+                        for (int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1) begin
+                            class_valid_escape = (down_vc == ESCAPE); // Escape upstream VC can only allocate Escape downstream VC (VC 0)
+                            if (is_available_vc_i[down_port][down_vc] && credits[down_port][down_vc] && class_valid_escape) begin
+                                eligible_vc_set_escape[up_port][up_vc][down_port][down_vc] = 1'b1;
                             end
                         end
                     end
+                end
+                if (is_adaptive_up && !escape_pending_i[up_port][up_vc]) begin
+                    eligible_vc_set[up_port][up_vc] = eligible_vc_set_adaptive[up_port][up_vc];
+                end
+                else begin
+                    eligible_vc_set[up_port][up_vc] = eligible_vc_set_escape[up_port][up_vc];
                 end
             end
         end

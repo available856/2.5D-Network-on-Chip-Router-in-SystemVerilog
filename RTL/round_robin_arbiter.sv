@@ -3,6 +3,7 @@ module round_robin_arbiter #(
 )(
     input rst,
     input clk,
+    input logic advance_i,
     input [AGENTS_NUM-1:0] requests_i,
     output logic [AGENTS_NUM-1:0] grants_o
 );
@@ -23,9 +24,10 @@ module round_robin_arbiter #(
         begin
             highest_priority <= 0;
         end
-        else
-        begin
-            highest_priority <= highest_priority_next;
+        else begin
+            if (advance_i) begin
+                highest_priority <= highest_priority_next;
+            end
         end
     end
 
@@ -41,7 +43,10 @@ module round_robin_arbiter #(
     always_comb
     begin
         int idx, next_idx;
-        grants_o = {AGENTS_NUM{1'b0}};
+
+        grants_o = '0;
+        highest_priority_next = '0;
+
         highest_priority_next = highest_priority;
         for(int i = 0; i < AGENTS_NUM; i = i + 1)
         begin
@@ -58,7 +63,7 @@ module round_robin_arbiter #(
             if(requests_i[idx])
             begin
                 grants_o[idx] = 1'b1;
-                highest_priority_next = next_idx[AGENTS_PTR_SIZE-1:0];
+                highest_priority_next = AGENTS_PTR_SIZE'(next_idx);
                 break;
             end
         end
