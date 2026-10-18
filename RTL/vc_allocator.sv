@@ -8,7 +8,7 @@ import noc_params::*;
 // ------------------------------------------------------------
 
 module vc_allocator #(
-    parameter int unsigned ADAPTIVE_TIMEOUT = 0 // 0: XY using both VC classes; > 0: adaptive with escape fallback
+    parameter int unsigned ADAPTIVE_TIMEOUT = 5 // 0: XY using both VC classes; > 0: adaptive with escape fallback
 )(
     input rst,
     input clk,
