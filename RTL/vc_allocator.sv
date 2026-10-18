@@ -8,7 +8,7 @@ import noc_params::*;
 // ------------------------------------------------------------
 
 module vc_allocator #(
-    parameter int unsigned ADAPTIVE_TIMEOUT = 5 // Must be >= 0
+    parameter int unsigned ADAPTIVE_TIMEOUT = 0 // 0: XY using both VC classes; > 0: adaptive with escape fallback
 )(
     input rst,
     input clk,
@@ -241,7 +241,8 @@ module vc_allocator #(
                     end                          
                     if (escape_port_set[up_port][up_vc][down_port]) begin
                         for (int down_vc = 0; down_vc < VC_NUM; down_vc = down_vc + 1) begin
-                            class_valid_escape = (down_vc == ESCAPE); // Escape upstream VC can only allocate Escape downstream VC (VC 0)
+                            class_valid_escape = (down_vc == ESCAPE) ||
+                                                 ((ADAPTIVE_TIMEOUT == 0) && (down_vc == ADAPTIVE)); // XY uses both classes when timeout is zero
                             if (is_available_vc_i[down_port][down_vc] && credits[down_port][down_vc] && class_valid_escape) begin
                                 eligible_vc_set_escape[up_port][up_vc][down_port][down_vc] = 1'b1;
                             end

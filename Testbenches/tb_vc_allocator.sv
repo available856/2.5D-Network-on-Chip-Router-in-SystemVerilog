@@ -5,7 +5,7 @@ import noc_params::*;
 module tb_vc_allocator;
 
 parameter CLK_PERIOD = 10;
-parameter ADAPTIVE_TIMEOUT = 5;
+parameter ADAPTIVE_TIMEOUT = 0;
 
 // -----------------------------
 // DUT signals
@@ -67,7 +67,7 @@ always @(posedge clk) begin
                     $fatal(1, "Invalid or duplicate VC allocation");
                 used[dp][dv]++;
                 if ((v == ESCAPE || dut.escape_pending[p][v]) &&
-                    (dv != ESCAPE || !ib_if.escape_port_set[p][v][dp]))
+                    ((ADAPTIVE_TIMEOUT != 0 && dv != ESCAPE) || !ib_if.escape_port_set[p][v][dp]))
                     $fatal(1, "Escape grant did not follow the XY mask");
             end
         end
@@ -84,10 +84,36 @@ begin
         ib_if.vc_request[LOCAL][v] = 1;
         #1;
         if (!ib_if.vc_valid[LOCAL][v] || ib_if.port_new[LOCAL][v] != WEST ||
-            ib_if.vc_new[LOCAL][v] != ((ADAPTIVE_TIMEOUT == 0) ? ESCAPE : v))
+            (ADAPTIVE_TIMEOUT != 0 && ib_if.vc_new[LOCAL][v] != v))
             $fatal(1, "Single-request allocation failed");
         @(posedge clk); @(negedge clk);
         ib_if.vc_request[LOCAL][v] = 0;
+    end
+end
+endtask
+
+task test_xy_both_classes();
+begin
+    $display("[%0t]-Test 2: XY using both VC classes", $time);
+    for (int up_vc = 0; up_vc < VC_NUM; up_vc++) begin
+        for (int down_vc = 0; down_vc < VC_NUM; down_vc++) begin
+            reset();
+            ib_if.adaptive_port_set[LOCAL][up_vc][SOUTH] = 1;
+            ib_if.escape_port_set[LOCAL][up_vc][WEST] = 1;
+            ib_if.credits_exist = '0;
+            ib_if.credits_exist[SOUTH] = '1;
+            ib_if.vc_request[LOCAL][up_vc] = 1;
+            #1;
+            if (ib_if.vc_valid[LOCAL][up_vc]) $fatal(1, "XY request used the adaptive port mask");
+
+            ib_if.credits_exist[WEST][down_vc] = 1;
+            #1;
+            if (!ib_if.vc_valid[LOCAL][up_vc] || ib_if.port_new[LOCAL][up_vc] != WEST ||
+                ib_if.vc_new[LOCAL][up_vc] != down_vc)
+                $fatal(1, "XY request did not use the credited VC class");
+            @(posedge clk); @(negedge clk);
+            ib_if.vc_request[LOCAL][up_vc] = 0;
+        end
     end
 end
 endtask
@@ -137,6 +163,7 @@ task test_collision();
 begin
     $display("[%0t]-Test 3: Collision and resource ownership", $time);
     reset();
+    ib_if.credits_exist[WEST][ADAPTIVE] = 0; // Contend for one downstream VC
     for (int p = 0; p < 3; p++) begin
         ib_if.escape_port_set[p][ESCAPE][WEST] = 1;
         ib_if.vc_request[p][ESCAPE] = 1;
@@ -154,6 +181,7 @@ task test_fairness();
 begin
     $display("[%0t]-Test 4: Round Robin across released resources", $time);
     reset();
+    ib_if.credits_exist[WEST][ADAPTIVE] = 0;
     for (int p = 0; p < 3; p++) begin
         ib_if.escape_port_set[p][ESCAPE][WEST] = 1;
         ib_if.vc_request[p][ESCAPE] = 1;
@@ -178,6 +206,7 @@ task test_backpressure_combined();
 begin
     $display("[%0t]-Test 5: Credits and VC release", $time);
     reset();
+    ib_if.credits_exist[WEST][ADAPTIVE] = 0;
 
     ib_if.escape_port_set[LOCAL][ESCAPE][WEST] = 1;
     ib_if.vc_request[LOCAL][ESCAPE] = 1;
@@ -227,7 +256,8 @@ initial begin
     rst = 1;
     clear_interface_signals();
     test_single_request();
-    test_escape_fallback();
+    if (ADAPTIVE_TIMEOUT == 0) test_xy_both_classes();
+    else test_escape_fallback();
     test_collision();
     test_fairness();
     test_backpressure_combined();

@@ -514,14 +514,15 @@ module tb_router;
                 h = head_of[match_id];
                 if (previous[match_id] >= 0 && !arrived[previous[match_id]]) $fatal(1, "Router reordered a packet");
                 if (match_id == h) begin
-                    if (flit.vc_id == ESCAPE) begin
-                        if (p != int'(xy_port(flit))) $fatal(1, "Escape output did not follow XY");
+                    if (dut.vc_allocator.ADAPTIVE_TIMEOUT == 0 || flit.vc_id == ESCAPE) begin
+                        if (p != int'(xy_port(flit))) $fatal(1, "Output did not follow XY");
                     end
                     else if (!((p == WEST && flit.data.head_data.x_dest < MESH_SIZE_X/2) ||
                                (p == SOUTH && flit.data.head_data.y_dest < MESH_SIZE_Y/2) ||
                                (p == LOCAL && flit.data.head_data.x_dest == MESH_SIZE_X/2 && flit.data.head_data.y_dest == MESH_SIZE_Y/2)))
                         $fatal(1, "Adaptive output is not a minimal 2x2 route");
-                    if (expected_flit[h].vc_id == ESCAPE && flit.vc_id != ESCAPE) $fatal(1, "Escape returned to adaptive");
+                    if (dut.vc_allocator.ADAPTIVE_TIMEOUT != 0 && expected_flit[h].vc_id == ESCAPE && flit.vc_id != ESCAPE)
+                        $fatal(1, "Escape returned to adaptive");
                     routed_port[h] = p; routed_vc[h] = int'(flit.vc_id);
                 end
                 if (p != routed_port[h] || int'(flit.vc_id) != routed_vc[h]) $fatal(1, "Packet route/VC changed after HEAD");

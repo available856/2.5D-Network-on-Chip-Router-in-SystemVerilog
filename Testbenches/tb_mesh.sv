@@ -110,7 +110,9 @@ always @(posedge clk) begin
             if (previous[match_id] >= 0 && !arrived[previous[match_id]]) $fatal(1, "Mesh reordered a packet");
             if (match_id == h) begin
                 output_vc[h] = int'(flit.vc_id);
-                if (expected_flit[h].vc_id == ESCAPE && flit.vc_id != ESCAPE) $fatal(1, "Escape returned to adaptive");
+                if (dut.mesh_row[0].mesh_col[0].router_inst.vc_allocator.ADAPTIVE_TIMEOUT != 0 &&
+                    expected_flit[h].vc_id == ESCAPE && flit.vc_id != ESCAPE)
+                    $fatal(1, "Escape returned to adaptive");
             end
             if (int'(flit.vc_id) != output_vc[h]) $fatal(1, "Destination VC changed within a packet");
             arrived[match_id] = 1; received++;
@@ -118,7 +120,7 @@ always @(posedge clk) begin
     end
 end
 
-// Check actual escape HEAD hops, including the hop entering escape.
+// Check actual XY HEAD hops, including both VC classes when timeout is zero.
 for (genvar y = 0; y < MESH_SIZE_Y; y++) begin: check_row
     for (genvar x = 0; x < MESH_SIZE_X; x++) begin: check_col
         always @(posedge clk) if (reset_done && !rst) begin
@@ -126,13 +128,14 @@ for (genvar y = 0; y < MESH_SIZE_Y; y++) begin: check_row
                 flit_t flit;
                 port_t expected;
                 flit = dut.mesh_row[y].mesh_col[x].router_inst.data_out[p];
-                if (flit.vc_id == ESCAPE && (flit.flit_label == HEAD || flit.flit_label == HEADTAIL)) begin
+                if ((dut.mesh_row[y].mesh_col[x].router_inst.vc_allocator.ADAPTIVE_TIMEOUT == 0 || flit.vc_id == ESCAPE) &&
+                    (flit.flit_label == HEAD || flit.flit_label == HEADTAIL)) begin
                     if (flit.data.head_data.x_dest < x) expected = WEST;
                     else if (flit.data.head_data.x_dest > x) expected = EAST;
                     else if (flit.data.head_data.y_dest < y) expected = SOUTH;
                     else if (flit.data.head_data.y_dest > y) expected = NORTH;
                     else expected = LOCAL;
-                    if (port_t'(p) != expected) $fatal(1, "Escape hop did not follow XY");
+                    if (port_t'(p) != expected) $fatal(1, "Hop did not follow XY");
                 end
             end
         end
