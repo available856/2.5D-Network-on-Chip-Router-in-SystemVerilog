@@ -16,7 +16,7 @@ module vc_allocator #(
     input_block2vc_allocator.vc_allocator ib_if
 );
     // Count sampled VA-request cycles without a final allocation grant to an adaptive upstream VC.
-    localparam TIMEOUT_WIDTH = (ADAPTIVE_TIMEOUT < 2) ? 1 : $clog2(ADAPTIVE_TIMEOUT + 1);
+    localparam TIMEOUT_WIDTH = (ADAPTIVE_TIMEOUT < 1) ? 1 : $clog2(ADAPTIVE_TIMEOUT + 1);
 
 
     // Number of resources ((port, VC) pairs)
@@ -114,9 +114,9 @@ module vc_allocator #(
         escape_pending = '0;
 
         // Combinational Flag Generation
-        for (int p = 0; p < PORT_NUM; p++) begin
-            for (int v = 0; v < VC_NUM; v++) begin
-                escape_pending[p][v] = (wait_counter[p][v] >= TIMEOUT_WIDTH'(ADAPTIVE_TIMEOUT));
+        for (int up_port = 0; up_port < PORT_NUM; up_port = up_port + 1) begin
+            for (int up_vc = 0; up_vc < VC_NUM; up_vc = up_vc + 1) begin
+                escape_pending[up_port][up_vc] = (wait_counter[up_port][up_vc] >= TIMEOUT_WIDTH'(ADAPTIVE_TIMEOUT));
             end
         end
 
