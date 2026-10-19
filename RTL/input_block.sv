@@ -21,8 +21,10 @@ module input_block #(
     logic [VC_NUM-1:0] is_full [PORT_NUM-1:0];
     logic [VC_NUM-1:0] is_empty [PORT_NUM-1:0];
 
-    logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_counter;
-    logic [PORT_NUM-1:0][VC_NUM-1:0][VC_COUNT:0] credits_counter_next ;
+    localparam int CREDIT_COUNT_WIDTH = (BUFFER_SIZE > 1) ? $clog2(BUFFER_SIZE + 1) : 1;
+
+    logic [PORT_NUM-1:0][VC_NUM-1:0][CREDIT_COUNT_WIDTH-1:0] credits_counter;
+    logic [PORT_NUM-1:0][VC_NUM-1:0][CREDIT_COUNT_WIDTH-1:0] credits_counter_next ;
     logic [PORT_NUM-1:0][VC_NUM-1:0] credits_exist; 
     logic [PORT_NUM-1:0][VC_NUM-1:0] flit_consumed; // Indicates if a flit has been consumed from the output port and VC
     
@@ -32,9 +34,9 @@ module input_block #(
 
     always_ff @(posedge clk, posedge rst) begin
         if (rst) begin
-            for (int dp = 0; dp < PORT_NUM; dp++) begin
-                for (int dvc = 0; dvc < VC_NUM; dvc++) begin
-                    credits_counter[dp][dvc] <= VC_DEPTH;
+            for (int down_port = 0; down_port < PORT_NUM; down_port++) begin
+                for (int down_vc = 0; down_vc < VC_NUM; down_vc++) begin
+                    credits_counter[down_port][down_vc] <= CREDIT_COUNT_WIDTH'(BUFFER_SIZE);
                 end
             end
         end 
@@ -109,7 +111,7 @@ module input_block #(
     for (int down_port = 0; down_port < PORT_NUM; down_port++) begin
         for (int down_vc = 0; down_vc < VC_NUM; down_vc++) begin
             case ({flit_consumed[down_port][down_vc], credit_return_i[down_port][down_vc]})
-                2'b01: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == VC_DEPTH) ? VC_DEPTH : credits_counter[down_port][down_vc] + 1;
+                2'b01: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == BUFFER_SIZE) ? CREDIT_COUNT_WIDTH'(BUFFER_SIZE) : credits_counter[down_port][down_vc] + 1;
                 2'b10: credits_counter_next[down_port][down_vc] = (credits_counter[down_port][down_vc] == 0) ? 0 : credits_counter[down_port][down_vc] - 1;
                 default : credits_counter_next[down_port][down_vc] = credits_counter[down_port][down_vc];
             endcase
