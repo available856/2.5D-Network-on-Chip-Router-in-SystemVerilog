@@ -14,7 +14,7 @@ module circular_buffer #(
     output logic is_empty
 );
 
-    localparam int POINTER_SIZE = VC_COUNT;
+    localparam int POINTER_SIZE = (BUFFER_SIZE > 1) ? $clog2(BUFFER_SIZE) : 1;
 
     flit_t memory [BUFFER_SIZE-1:0];
 
@@ -29,7 +29,7 @@ module circular_buffer #(
 
   	assign is_empty = (num_flits == 0);
   	assign is_full = (num_flits == BUFFER_SIZE);
-    assign peek_o = memory[read_ptr];
+    assign peek_o = is_empty ? '0 : memory[read_ptr];
     
     /*
     Sequential logic:

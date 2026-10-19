@@ -157,6 +157,24 @@ begin
   switch_request_o = 0;
   vc_allocatable_next = 0;
 
+  // Check FIFO access and packet framing.
+  if ((write_i && is_full_o) || (read_i && is_empty_o))
+      error_next = 1'b1;
+
+  if (write_cmd) begin
+      if ((ss == IDLE) && is_empty_o) begin
+          if ((data_i.flit_label != HEAD) && (data_i.flit_label != HEADTAIL))
+              error_next = 1'b1;
+      end
+      else if (end_packet ||
+               (data_i.flit_label == HEAD) || (data_i.flit_label == HEADTAIL)) begin
+          error_next = 1'b1;
+      end
+
+      if ((data_i.flit_label == TAIL) || (data_i.flit_label == HEADTAIL))
+          end_packet_next = 1'b1;
+  end
+
   unique case(ss)
       IDLE:
       begin

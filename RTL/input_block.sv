@@ -55,7 +55,7 @@ module input_block #(
         for(ip=0; ip<PORT_NUM; ip++)
         begin: generate_input_ports
             input_port #(
-                .BUFFER_SIZE(VC_DEPTH),
+                .BUFFER_SIZE(BUFFER_SIZE),
                 .X_CURRENT(X_CURRENT),
                 .Y_CURRENT(Y_CURRENT)
             )
